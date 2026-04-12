@@ -3,23 +3,26 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard, Bot, FolderKanban, Globe, CreditCard,
-  Settings, ChevronLeft, ChevronRight, Zap
+  Settings, ChevronLeft, ChevronRight, Zap, Shield
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import logo from "@/assets/logo.png";
-
-const navItems = [
-  { icon: LayoutDashboard, label: "Overview", path: "/" },
-  { icon: Bot, label: "AI Studio", path: "/ai" },
-  { icon: FolderKanban, label: "Projects", path: "/projects" },
-  { icon: Globe, label: "Community", path: "/community" },
-  { icon: CreditCard, label: "Tokens", path: "/tokens" },
-  { icon: Settings, label: "Settings", path: "/settings" },
-];
 
 const AppSidebar = () => {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAdmin, tokenBalance, profile } = useAuth();
+
+  const navItems = [
+    { icon: LayoutDashboard, label: "Overview", path: "/" },
+    { icon: Bot, label: "AI Studio", path: "/ai" },
+    { icon: FolderKanban, label: "Projects", path: "/projects" },
+    { icon: Globe, label: "Community", path: "/community" },
+    { icon: CreditCard, label: "Tokens", path: "/tokens" },
+    { icon: Settings, label: "Settings", path: "/settings" },
+    ...(isAdmin ? [{ icon: Shield, label: "Admin", path: "/admin" }] : []),
+  ];
 
   return (
     <motion.aside
@@ -30,13 +33,10 @@ const AppSidebar = () => {
       <div className="flex items-center gap-3 p-4 border-b border-border/50">
         <img src={logo} alt="Stinger" className="w-9 h-9 flex-shrink-0" />
         {!collapsed && (
-          <motion.span
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-sm font-semibold text-foreground truncate"
-          >
-            Stinger Dev
-          </motion.span>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="truncate">
+            <span className="text-sm font-semibold text-foreground">Stinger Dev</span>
+            {profile?.is_verified && <span className="text-blue-400 ml-1 text-xs">✔</span>}
+          </motion.div>
         )}
       </div>
 
@@ -65,7 +65,7 @@ const AppSidebar = () => {
           <div className="px-3 py-2 mb-2 rounded-lg bg-primary/5 border border-primary/20">
             <div className="flex items-center gap-1.5 text-xs text-primary">
               <Zap size={12} />
-              <span className="font-medium">1,250 tokens</span>
+              <span className="font-medium">{tokenBalance.toLocaleString()} tokens</span>
             </div>
           </div>
         )}

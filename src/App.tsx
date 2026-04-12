@@ -4,23 +4,27 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import SplashScreen from "@/components/SplashScreen";
+import CookieConsent from "@/components/CookieConsent";
 import DashboardLayout from "@/layouts/DashboardLayout";
+import AuthPage from "@/pages/AuthPage";
 import Dashboard from "@/pages/Dashboard";
 import AIStudio from "@/pages/AIStudio";
 import Projects from "@/pages/Projects";
 import Community from "@/pages/Community";
 import Tokens from "@/pages/Tokens";
 import SettingsPage from "@/pages/SettingsPage";
+import AdminDashboard from "@/pages/AdminDashboard";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => {
+const AppContent = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [splashVisible, setSplashVisible] = useState(true);
+  const { session, loading } = useAuth();
 
-  // Apply saved theme on mount
   useEffect(() => {
     const saved = localStorage.getItem("stinger-theme") || "neon";
     const root = document.documentElement;
@@ -33,38 +37,59 @@ const App = () => {
     }
   }, []);
 
+  if (showSplash) {
+    return (
+      <SplashScreen
+        visible={splashVisible}
+        onComplete={() => {
+          setSplashVisible(false);
+          setShowSplash(false);
+        }}
+      />
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-pulse text-primary text-sm">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <AuthPage />;
+  }
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        {showSplash && (
-          <SplashScreen
-            visible={splashVisible}
-            onComplete={() => {
-              setSplashVisible(false);
-              setShowSplash(false);
-            }}
-          />
-        )}
-        {!showSplash && (
-          <BrowserRouter>
-            <Routes>
-              <Route element={<DashboardLayout />}>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/ai" element={<AIStudio />} />
-                <Route path="/projects" element={<Projects />} />
-                <Route path="/community" element={<Community />} />
-                <Route path="/tokens" element={<Tokens />} />
-                <Route path="/settings" element={<SettingsPage />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        )}
-      </TooltipProvider>
-    </QueryClientProvider>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<DashboardLayout />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/ai" element={<AIStudio />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/community" element={<Community />} />
+          <Route path="/tokens" element={<Tokens />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/admin" element={<AdminDashboard />} />
+        </Route>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+      <CookieConsent />
+    </BrowserRouter>
   );
 };
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
 
 export default App;
