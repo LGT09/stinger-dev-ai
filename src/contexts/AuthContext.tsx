@@ -9,6 +9,11 @@ interface Profile {
   email: string | null;
   avatar_url: string | null;
   is_verified: boolean;
+  is_banned: boolean;
+  is_suspended: boolean;
+  ban_reason: string | null;
+  referral_code: string | null;
+  referred_by: string | null;
   plan: "free" | "pro";
 }
 
@@ -37,71 +42,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
-    if (data) setProfile(data);
+    const { data } = await supabase.from("profiles").select("*").eq("user_id", userId).single();
+    if (data) setProfile(data as any);
   };
 
   const fetchRoles = async (userId: string) => {
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
+    const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
     setIsAdmin(data?.some((r) => r.role === "admin") ?? false);
   };
 
   const fetchTokens = async (userId: string) => {
-    const { data } = await supabase
-      .from("token_balances")
-      .select("balance")
-      .eq("user_id", userId)
-      .single();
+    const { data } = await supabase.from("token_balances").select("balance").eq("user_id", userId).single();
     setTokenBalance(data?.balance ?? 0);
   };
 
-  const refreshProfile = async () => {
-    if (user) await fetchProfile(user.id);
-  };
-
-  const refreshTokens = async () => {
-    if (user) await fetchTokens(user.id);
-  };
+  const refreshProfile = async () => { if (user) await fetchProfile(user.id); };
+  const refreshTokens = async () => { if (user) await fetchTokens(user.id); };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          setTimeout(async () => {
-            await Promise.all([
-              fetchProfile(session.user.id),
-              fetchRoles(session.user.id),
-              fetchTokens(session.user.id),
-            ]);
-            setLoading(false);
-          }, 0);
-        } else {
-          setProfile(null);
-          setIsAdmin(false);
-          setTokenBalance(0);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        setTimeout(async () => {
+          await Promise.all([fetchProfile(session.user.id), fetchRoles(session.user.id), fetchTokens(session.user.id)]);
           setLoading(false);
-        }
+        }, 0);
+      } else {
+        setProfile(null);
+        setIsAdmin(false);
+        setTokenBalance(0);
+        setLoading(false);
       }
-    );
+    });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        Promise.all([
-          fetchProfile(session.user.id),
-          fetchRoles(session.user.id),
-          fetchTokens(session.user.id),
-        ]).then(() => setLoading(false));
+        Promise.all([fetchProfile(session.user.id), fetchRoles(session.user.id), fetchTokens(session.user.id)]).then(() => setLoading(false));
       } else {
         setLoading(false);
       }
@@ -110,14 +89,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-  };
+  const signOut = async () => { await supabase.auth.signOut(); };
 
   return (
-    <AuthContext.Provider
-      value={{ session, user, profile, isAdmin, tokenBalance, loading, signOut, refreshProfile, refreshTokens }}
-    >
+    <AuthContext.Provider value={{ session, user, profile, isAdmin, tokenBalance, loading, signOut, refreshProfile, refreshTokens }}>
       {children}
     </AuthContext.Provider>
   );
