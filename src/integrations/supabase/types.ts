@@ -17,34 +17,49 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          ban_reason: string | null
           created_at: string
           display_name: string | null
           email: string | null
           id: string
+          is_banned: boolean
+          is_suspended: boolean
           is_verified: boolean
           plan: Database["public"]["Enums"]["app_plan"]
+          referral_code: string | null
+          referred_by: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           avatar_url?: string | null
+          ban_reason?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null
           id?: string
+          is_banned?: boolean
+          is_suspended?: boolean
           is_verified?: boolean
           plan?: Database["public"]["Enums"]["app_plan"]
+          referral_code?: string | null
+          referred_by?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           avatar_url?: string | null
+          ban_reason?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null
           id?: string
+          is_banned?: boolean
+          is_suspended?: boolean
           is_verified?: boolean
           plan?: Database["public"]["Enums"]["app_plan"]
+          referral_code?: string | null
+          referred_by?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -95,6 +110,60 @@ export type Database = {
           updated_at?: string
           user_id?: string
           views?: number
+        }
+        Relationships: []
+      }
+      referral_rewards: {
+        Row: {
+          created_at: string
+          id: string
+          referred_amount: number
+          referred_user_id: string
+          referrer_amount: number
+          referrer_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          referred_amount?: number
+          referred_user_id: string
+          referrer_amount?: number
+          referrer_user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          referred_amount?: number
+          referred_user_id?: string
+          referrer_amount?: number
+          referrer_user_id?: string
+        }
+        Relationships: []
+      }
+      shared_chats: {
+        Row: {
+          created_at: string
+          id: string
+          messages: Json
+          share_code: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          messages?: Json
+          share_code?: string
+          title?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          messages?: Json
+          share_code?: string
+          title?: string
+          user_id?: string
         }
         Relationships: []
       }
