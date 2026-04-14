@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard, Bot, FolderKanban, Globe, CreditCard,
-  Settings, ChevronLeft, ChevronRight, Zap, Shield
+  Settings, ChevronLeft, ChevronRight, Zap, Shield, Book
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import logo from "@/assets/logo.png";
@@ -20,6 +20,7 @@ const AppSidebar = () => {
     { icon: FolderKanban, label: "Projects", path: "/projects" },
     { icon: Globe, label: "Community", path: "/community" },
     { icon: CreditCard, label: "Tokens", path: "/tokens" },
+    { icon: Book, label: "Docs", path: "/docs" },
     { icon: Settings, label: "Settings", path: "/settings" },
     ...(isAdmin ? [{ icon: Shield, label: "Admin", path: "/admin" }] : []),
   ];
