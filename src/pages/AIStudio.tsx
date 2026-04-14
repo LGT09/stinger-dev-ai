@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Send, Code, Image, Video, Music, Sparkles, Loader2, Copy, Share2,
   FolderPlus, Download, Globe, Bot, Database, AppWindow, Mic, Paperclip,
-  Plus, MessageSquare, History, ChevronDown, FileCode, Eye, Github,
+  Plus, MessageSquare, History, FileCode, Eye,
   Lightbulb, X
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
