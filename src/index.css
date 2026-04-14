@@ -116,4 +116,41 @@
   .gradient-neon {
     background: linear-gradient(135deg, hsl(var(--neon-yellow)), hsl(var(--neon-cyan)));
   }
+  .liquid-chrome {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--neon-yellow) / 0.1) 0%,
+      hsl(var(--neon-cyan) / 0.15) 25%,
+      hsl(var(--neon-blue) / 0.1) 50%,
+      hsl(var(--neon-yellow) / 0.15) 75%,
+      hsl(var(--neon-cyan) / 0.1) 100%
+    );
+    background-size: 400% 400%;
+    animation: liquid-flow 8s ease infinite;
+  }
+  .btn-hover {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .btn-hover::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, hsl(var(--neon-yellow) / 0.2), hsl(var(--neon-cyan) / 0.2));
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .btn-hover:hover::before {
+    opacity: 1;
+  }
+  .btn-hover:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px hsl(var(--primary) / 0.3);
+  }
+}
+
+@keyframes liquid-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }

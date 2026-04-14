@@ -18,6 +18,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import AdminDashboard from "@/pages/AdminDashboard";
 import ResetPassword from "@/pages/ResetPassword";
 import SharedChat from "@/pages/SharedChat";
+import Documentation from "@/pages/Documentation";
 import NotFound from "@/pages/NotFound";
 import { ShieldAlert, Mail } from "lucide-react";
 
@@ -81,6 +82,7 @@ const AppContent = () => {
           <Route path="/community" element={<Community />} />
           <Route path="/tokens" element={<Tokens />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/docs" element={<Documentation />} />
           <Route path="/admin" element={<AdminDashboard />} />
         </Route>
         <Route path="*" element={<NotFound />} />
