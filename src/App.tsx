@@ -19,6 +19,10 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import ResetPassword from "@/pages/ResetPassword";
 import SharedChat from "@/pages/SharedChat";
 import Documentation from "@/pages/Documentation";
+import ContactSupport from "@/pages/ContactSupport";
+import PrivacySecurity from "@/pages/PrivacySecurity";
+import SecretsManager from "@/pages/SecretsManager";
+import Workspace from "@/pages/Workspace";
 import NotFound from "@/pages/NotFound";
 import { ShieldAlert, Mail } from "lucide-react";
 
@@ -26,14 +30,19 @@ const queryClient = new QueryClient();
 
 const BannedScreen = ({ reason }: { reason?: string | null }) => (
   <div className="min-h-screen bg-background flex items-center justify-center p-4" data-theme="neon">
-    <div className="glass rounded-2xl p-8 max-w-md text-center">
+    <div className="glass rounded-2xl p-8 max-w-md text-center liquid-chrome">
       <ShieldAlert size={48} className="text-destructive mx-auto mb-4" />
       <p className="text-base font-semibold text-foreground mb-2">Account Suspended</p>
       <p className="text-sm text-muted-foreground mb-2">Your account has been banned or suspended.</p>
       {reason && <p className="text-xs text-destructive/80 italic mb-4">Reason: {reason}</p>}
-      <a href="mailto:traxxiontech@gmail.com?subject=Account Appeal" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:opacity-90">
-        <Mail size={14} /> Contact Support
-      </a>
+      <div className="space-y-2">
+        <a href="mailto:info@stinger.indevs.in?subject=Account Appeal" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:opacity-90 btn-hover w-full justify-center">
+          <Mail size={14} /> Contact Support
+        </a>
+        <a href="mailto:traxxiontech@gmail.com?subject=Account Appeal" className="inline-flex items-center gap-2 bg-secondary text-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:opacity-90 w-full justify-center">
+          <Mail size={14} /> traxxiontech@gmail.com
+        </a>
+      </div>
     </div>
   </div>
 );
@@ -48,7 +57,7 @@ const AppContent = () => {
     const root = document.documentElement;
     root.classList.remove("dark");
     root.removeAttribute("data-theme");
-    if (saved === "neon") root.setAttribute("data-theme", "neon");
+    if (["neon", "ocean", "sunset", "forest"].includes(saved)) root.setAttribute("data-theme", saved);
     else if (saved === "dark") root.classList.add("dark");
     else if (saved === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches) root.classList.add("dark");
   }, []);
@@ -65,7 +74,6 @@ const AppContent = () => {
 
   if (!session) return <AuthPage />;
 
-  // Check banned/suspended
   if (profile?.is_banned || profile?.is_suspended) {
     return <BannedScreen reason={profile?.ban_reason} />;
   }
@@ -81,8 +89,12 @@ const AppContent = () => {
           <Route path="/projects" element={<Projects />} />
           <Route path="/community" element={<Community />} />
           <Route path="/tokens" element={<Tokens />} />
+          <Route path="/secrets" element={<SecretsManager />} />
+          <Route path="/workspace" element={<Workspace />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/docs" element={<Documentation />} />
+          <Route path="/privacy" element={<PrivacySecurity />} />
+          <Route path="/contact" element={<ContactSupport />} />
           <Route path="/admin" element={<AdminDashboard />} />
         </Route>
         <Route path="*" element={<NotFound />} />
