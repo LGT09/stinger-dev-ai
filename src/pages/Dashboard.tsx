@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Zap, FolderKanban, Bot, Globe, ArrowRight, Star } from "lucide-react";
+import { Zap, FolderKanban, Bot, Globe, ArrowRight, Star, Share2, Copy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -64,6 +64,23 @@ const Dashboard = () => {
           ))}
         </div>
       </div>
+
+      {/* Referral Link */}
+      {profile?.referral_code && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="glass rounded-xl p-4 liquid-chrome-intense border-glow">
+          <div className="flex items-center gap-2 mb-2">
+            <Share2 size={14} className="text-primary" />
+            <p className="text-sm font-medium text-foreground">🎁 Your Referral Link</p>
+          </div>
+          <p className="text-xs text-muted-foreground mb-2">Share & earn — you get <span className="text-primary">300 tokens</span>, friend gets <span className="text-accent">200 tokens</span>!</p>
+          <div className="flex gap-2 items-center">
+            <code className="flex-1 bg-secondary rounded-lg px-3 py-2 text-xs text-foreground font-mono truncate">{`${window.location.origin}?ref=${profile.referral_code}`}</code>
+            <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}?ref=${profile.referral_code}`); }} className="bg-primary text-primary-foreground px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-1 btn-hover">
+              <Copy size={12} /> Copy
+            </button>
+          </div>
+        </motion.div>
+      )}
 
       {/* Credits */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="glass rounded-xl p-5 liquid-chrome">
