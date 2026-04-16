@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, FolderKanban, Clock, Eye, Download, Trash2, Globe, Code, Edit3, ArrowRightLeft, X, Github, Copy, Share2 } from "lucide-react";
+import { Plus, FolderKanban, Clock, Eye, Download, Trash2, Globe, Code, Edit3, ArrowRightLeft, X, GitBranch, Copy, Share2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";

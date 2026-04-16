@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Moon, Sun, Monitor, Zap, LogOut, User, Share2, Copy, Camera, Waves, TreePine, Sunset, Github, ExternalLink } from "lucide-react";
+import { Moon, Sun, Monitor, Zap, LogOut, User, Share2, Copy, Camera, Waves, TreePine, Sunset, GitBranch, ExternalLink } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
