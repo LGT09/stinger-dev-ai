@@ -143,7 +143,7 @@ const SettingsPage = () => {
       {/* GitHub Integration */}
       <div className="glass rounded-xl p-4 space-y-3">
         <div className="flex items-center gap-2">
-          <Github size={14} className="text-foreground" />
+          <GitBranch size={14} className="text-foreground" />
           <p className="text-xs font-medium text-foreground">GitHub Integration</p>
         </div>
         {githubConnected ? (

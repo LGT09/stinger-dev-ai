@@ -250,7 +250,7 @@ const Projects = () => {
                   <ArrowRightLeft size={14} />
                 </button>
                 <button onClick={() => pushToGitHub(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground" title="Push to GitHub">
-                  <Github size={14} />
+                  <GitBranch size={14} />
                 </button>
                 <button onClick={() => togglePublish(p.id, p.is_published)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground" title={p.is_published ? "Unpublish" : "Publish"}>
                   <Globe size={14} className={p.is_published ? "text-primary" : ""} />
