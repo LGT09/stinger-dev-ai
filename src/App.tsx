@@ -23,6 +23,9 @@ import ContactSupport from "@/pages/ContactSupport";
 import PrivacySecurity from "@/pages/PrivacySecurity";
 import SecretsManager from "@/pages/SecretsManager";
 import Workspace from "@/pages/Workspace";
+import ProjectViewer from "@/pages/ProjectViewer";
+import SupabaseIntegration from "@/pages/SupabaseIntegration";
+import Landing from "@/pages/Landing";
 import NotFound from "@/pages/NotFound";
 import { ShieldAlert, Mail } from "lucide-react";
 
@@ -72,7 +75,19 @@ const AppContent = () => {
     return <div className="min-h-screen bg-background flex items-center justify-center"><div className="animate-pulse text-primary text-sm">Loading...</div></div>;
   }
 
-  if (!session) return <AuthPage />;
+  if (!session) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/shared/:code" element={<SharedChat />} />
+          <Route path="*" element={<LandingWrapper />} />
+        </Routes>
+        <CookieConsent />
+      </BrowserRouter>
+    );
+  }
 
   if (profile?.is_banned || profile?.is_suspended) {
     return <BannedScreen reason={profile?.ban_reason} />;
@@ -87,7 +102,9 @@ const AppContent = () => {
           <Route path="/" element={<Dashboard />} />
           <Route path="/ai" element={<AIStudio />} />
           <Route path="/projects" element={<Projects />} />
+          <Route path="/projects/:id" element={<ProjectViewer />} />
           <Route path="/community" element={<Community />} />
+          <Route path="/integrations/supabase" element={<SupabaseIntegration />} />
           <Route path="/tokens" element={<Tokens />} />
           <Route path="/secrets" element={<SecretsManager />} />
           <Route path="/workspace" element={<Workspace />} />

@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, FolderKanban, Clock, Eye, Download, Trash2, Globe, Code, Edit3, ArrowRightLeft, X, GitBranch, Copy, Share2 } from "lucide-react";
+import { Plus, FolderKanban, Clock, Download, Trash2, Globe, Code, Edit3, ArrowRightLeft, X, GitBranch, Copy, Share2, Eye, Image as ImageIcon, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { parseProjectFiles, downloadProjectAsZip } from "@/lib/projectFiles";
 
 const statusColor: Record<string, string> = {
   Active: "bg-accent/20 text-accent",
@@ -12,31 +14,39 @@ const statusColor: Record<string, string> = {
 };
 
 const Projects = () => {
+  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [projects, setProjects] = useState<any[]>([]);
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newLang, setNewLang] = useState("React");
-  const [viewProject, setViewProject] = useState<any>(null);
   const [editProject, setEditProject] = useState<any>(null);
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editLang, setEditLang] = useState("");
-  const [editCode, setEditCode] = useState("");
   const [transferProject, setTransferProject] = useState<any>(null);
   const [transferEmail, setTransferEmail] = useState("");
 
-  useEffect(() => {
-    if (user) loadProjects();
-  }, [user]);
+  // Publish-to-community modal state
+  const [publishProject, setPublishProject] = useState<any>(null);
+  const [pubName, setPubName] = useState("");
+  const [pubDesc, setPubDesc] = useState("");
+  const [pubCover, setPubCover] = useState<string>("");
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  // GitHub push modal
+  const [ghProject, setGhProject] = useState<any>(null);
+  const [repoName, setRepoName] = useState("");
+  const [repoPrivate, setRepoPrivate] = useState(false);
+  const [repoDesc, setRepoDesc] = useState("");
+  const [pushing, setPushing] = useState(false);
+
+  useEffect(() => { if (user) loadProjects(); }, [user]);
 
   const loadProjects = async () => {
-    const { data } = await supabase
-      .from("projects")
-      .select("*")
-      .eq("user_id", user!.id)
-      .order("updated_at", { ascending: false });
+    const { data } = await supabase.from("projects").select("*").eq("user_id", user!.id).order("updated_at", { ascending: false });
     if (data) setProjects(data);
   };
 
@@ -50,40 +60,20 @@ const Projects = () => {
   };
 
   const deleteProject = async (id: string) => {
+    if (!confirm("Delete this project?")) return;
     await supabase.from("projects").delete().eq("id", id);
     toast.success("Project deleted");
     loadProjects();
   };
 
-  const togglePublish = async (id: string, current: boolean) => {
-    await supabase.from("projects").update({
-      is_published: !current, status: !current ? "Published" : "Draft",
-    }).eq("id", id);
-    toast.success(!current ? "Published to community" : "Unpublished");
-    loadProjects();
-  };
-
-  const downloadProject = (project: any) => {
-    const content = project.code_content || `// ${project.name}\n// Language: ${project.language}\nconsole.log("Hello from ${project.name}");`;
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url;
-    a.download = `${project.name.replace(/\s+/g, "-").toLowerCase()}.txt`;
-    a.click(); URL.revokeObjectURL(url);
-  };
-
   const openEdit = (p: any) => {
-    setEditProject(p);
-    setEditName(p.name);
-    setEditDesc(p.description || "");
-    setEditLang(p.language || "React");
-    setEditCode(p.code_content || "");
+    setEditProject(p); setEditName(p.name); setEditDesc(p.description || ""); setEditLang(p.language || "React");
   };
 
   const saveEdit = async () => {
     if (!editProject) return;
     const { error } = await supabase.from("projects").update({
-      name: editName, description: editDesc, language: editLang, code_content: editCode,
+      name: editName, description: editDesc, language: editLang,
     }).eq("id", editProject.id);
     if (error) toast.error("Failed to update");
     else { toast.success("Project updated"); setEditProject(null); loadProjects(); }
@@ -91,35 +81,111 @@ const Projects = () => {
 
   const handleTransfer = async () => {
     if (!transferEmail.trim() || !transferProject) return;
-    // Find target user by email
-    const { data: targetProfile } = await supabase
-      .from("profiles")
-      .select("user_id")
-      .eq("email", transferEmail.trim())
-      .single();
-    if (!targetProfile) {
-      toast.error("User not found. Make sure they have a Stinger Dev account.");
-      return;
-    }
-    const { error } = await supabase.from("projects").update({
-      user_id: targetProfile.user_id,
-    }).eq("id", transferProject.id);
+    const { data: targetProfile } = await supabase.from("profiles").select("user_id").eq("email", transferEmail.trim()).maybeSingle();
+    if (!targetProfile) { toast.error("User not found. Make sure they have a Stinger Dev account."); return; }
+    const { error } = await supabase.from("projects").update({ user_id: targetProfile.user_id }).eq("id", transferProject.id);
     if (error) toast.error("Transfer failed");
-    else {
-      toast.success(`Project transferred to ${transferEmail}`);
-      setTransferProject(null);
-      setTransferEmail("");
-      loadProjects();
-    }
+    else { toast.success(`Project transferred to ${transferEmail}`); setTransferProject(null); setTransferEmail(""); loadProjects(); }
   };
 
-  const pushToGitHub = (project: any) => {
+  // Publish to community with cover image
+  const openPublish = (p: any) => {
+    setPublishProject(p);
+    setPubName(p.name);
+    setPubDesc(p.description || "");
+    setPubCover("");
+  };
+
+  const uploadCover = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    if (file.size > 2 * 1024 * 1024) { toast.error("Max 2MB"); return; }
+    setUploadingCover(true);
+    const ext = file.name.split(".").pop();
+    const path = `${user.id}/covers/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+    if (error) { toast.error("Upload failed"); setUploadingCover(false); return; }
+    const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
+    setPubCover(publicUrl);
+    setUploadingCover(false);
+    toast.success("Cover uploaded");
+  };
+
+  const submitPublish = async () => {
+    if (!publishProject) return;
+    if (!pubName.trim()) { toast.error("Name is required"); return; }
+    const desc = pubCover ? `[cover:${pubCover}]\n${pubDesc}` : pubDesc;
+    const { error } = await supabase.from("projects").update({
+      name: pubName, description: desc, is_published: true, status: "Published",
+    }).eq("id", publishProject.id);
+    if (error) toast.error("Publish failed");
+    else { toast.success("Published to community 🎉"); setPublishProject(null); loadProjects(); }
+  };
+
+  const unpublish = async (id: string) => {
+    await supabase.from("projects").update({ is_published: false, status: "Draft" }).eq("id", id);
+    toast.success("Unpublished");
+    loadProjects();
+  };
+
+  // Download as ZIP
+  const downloadZip = async (project: any) => {
+    const files = parseProjectFiles(project.code_content, `${project.name}.txt`);
+    await downloadProjectAsZip(project.name, files);
+    toast.success(`Downloaded ${project.name}.zip`);
+  };
+
+  // GitHub push
+  const openGhPush = (p: any) => {
     const token = localStorage.getItem("github_token");
-    if (!token) {
-      toast.error("Connect GitHub first in Settings");
-      return;
+    if (!token) { toast.error("Connect GitHub first in Settings"); return; }
+    setGhProject(p);
+    setRepoName(p.name.replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase());
+    setRepoDesc(p.description || `Created with Stinger AI Dev — ${p.language}`);
+    setRepoPrivate(false);
+  };
+
+  const pushToGitHub = async () => {
+    const token = localStorage.getItem("github_token");
+    if (!token || !ghProject) return;
+    if (!repoName.trim()) { toast.error("Repo name required"); return; }
+    setPushing(true);
+    try {
+      // 1. create the repo
+      const createRes = await fetch("https://api.github.com/user/repos", {
+        method: "POST",
+        headers: { Authorization: `token ${token}`, "Content-Type": "application/json", Accept: "application/vnd.github+json" },
+        body: JSON.stringify({ name: repoName, description: repoDesc, private: repoPrivate, auto_init: true }),
+      });
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({}));
+        throw new Error(err.message || `Create failed (${createRes.status})`);
+      }
+      const repo = await createRes.json();
+      const owner = repo.owner.login;
+
+      // 2. upload files
+      const files = parseProjectFiles(ghProject.code_content, `${ghProject.name}.txt`);
+      if (files.length === 0) {
+        files.push({ path: "README.md", content: `# ${ghProject.name}\n\nCreated with Stinger AI Dev.` });
+      }
+      for (const f of files) {
+        // base64 encode (utf-8 safe)
+        const content = btoa(unescape(encodeURIComponent(f.content)));
+        await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/${f.path}`, {
+          method: "PUT",
+          headers: { Authorization: `token ${token}`, "Content-Type": "application/json", Accept: "application/vnd.github+json" },
+          body: JSON.stringify({ message: `Add ${f.path} via Stinger AI Dev`, content }),
+        });
+      }
+      toast.success(`Pushed to github.com/${owner}/${repoName}`);
+      window.open(repo.html_url, "_blank");
+      setGhProject(null);
+    } catch (e: any) {
+      toast.error(e.message || "Push failed");
+    } finally {
+      setPushing(false);
     }
-    toast.info("GitHub push feature — connect your repo in Settings to push code.");
   };
 
   return (
@@ -127,14 +193,13 @@ const Projects = () => {
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">Your projects</p>
         <button onClick={() => setShowNew(true)}
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-xs font-medium hover:opacity-90 transition-opacity btn-hover">
+          className="flex items-center gap-2 bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-xs font-medium hover:opacity-90 btn-hover">
           <Plus size={14} /> New project
         </button>
       </div>
 
-      {/* New project form */}
       {showNew && (
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="glass rounded-xl p-4 space-y-3">
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="glass rounded-xl p-4 space-y-3 liquid-chrome">
           <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Project name" className="w-full bg-secondary rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />
           <input value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Description" className="w-full bg-secondary rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />
           <select value={newLang} onChange={e => setNewLang(e.target.value)} className="bg-secondary rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none">
@@ -147,7 +212,7 @@ const Projects = () => {
         </motion.div>
       )}
 
-      {/* Edit project modal */}
+      {/* Edit modal */}
       <AnimatePresence>
         {editProject && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="glass rounded-xl p-4 space-y-3">
@@ -160,13 +225,13 @@ const Projects = () => {
             <select value={editLang} onChange={e => setEditLang(e.target.value)} className="bg-secondary rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none">
               {["React", "Next.js", "Python", "Node.js", "React Native", "Vue", "Angular", "SQL", "HTML/CSS"].map(l => <option key={l}>{l}</option>)}
             </select>
-            <textarea value={editCode} onChange={e => setEditCode(e.target.value)} placeholder="Code content" rows={8} className="w-full bg-secondary rounded-lg px-3 py-2 text-xs text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary/50" />
+            <p className="text-[11px] text-muted-foreground">💡 To edit code/files, click <span className="text-primary">View</span> on the project — full file editor opens.</p>
             <button onClick={saveEdit} className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-xs font-medium btn-hover">Save Changes</button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Transfer project modal */}
+      {/* Transfer modal */}
       <AnimatePresence>
         {transferProject && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="glass rounded-xl p-4 space-y-3">
@@ -174,8 +239,8 @@ const Projects = () => {
               <p className="text-sm font-medium text-foreground flex items-center gap-2"><ArrowRightLeft size={14} className="text-primary" /> Transfer "{transferProject.name}"</p>
               <button onClick={() => setTransferProject(null)} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
             </div>
-            <p className="text-xs text-muted-foreground">Enter the email of the user you want to transfer this project to. They must have a Stinger Dev account.</p>
-            <input value={transferEmail} onChange={e => setTransferEmail(e.target.value)} placeholder="Recipient email" type="email" className="w-full bg-secondary rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />
+            <p className="text-xs text-muted-foreground">Enter the email of the user you want to transfer to.</p>
+            <input value={transferEmail} onChange={e => setTransferEmail(e.target.value)} placeholder="recipient@email.com" type="email" className="w-full bg-secondary rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />
             <div className="flex gap-2">
               <button onClick={handleTransfer} className="bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-xs font-medium btn-hover">Transfer</button>
               <button onClick={() => setTransferProject(null)} className="text-xs text-muted-foreground">Cancel</button>
@@ -184,18 +249,63 @@ const Projects = () => {
         )}
       </AnimatePresence>
 
-      {/* View project code modal */}
-      {viewProject && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-foreground">{viewProject.name} — Code</p>
-            <button onClick={() => setViewProject(null)} className="text-xs text-muted-foreground">Close</button>
-          </div>
-          <pre className="bg-secondary rounded-lg p-4 text-xs text-foreground overflow-auto max-h-96 font-mono">
-            {viewProject.code_content || "No code content yet. Use AI Studio to generate code for this project."}
-          </pre>
-        </motion.div>
-      )}
+      {/* Publish modal */}
+      <AnimatePresence>
+        {publishProject && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="glass rounded-xl p-4 space-y-3 liquid-chrome border-glow">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-foreground flex items-center gap-2"><Globe size={14} className="text-primary" /> Publish to Community</p>
+              <button onClick={() => setPublishProject(null)} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
+            </div>
+            <p className="text-xs text-muted-foreground">Customize how this project appears to everyone on the community page.</p>
+            <input value={pubName} onChange={e => setPubName(e.target.value)} placeholder="Public project name" className="w-full bg-secondary rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />
+            <textarea value={pubDesc} onChange={e => setPubDesc(e.target.value)} placeholder="Short description" rows={3} className="w-full bg-secondary rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />
+            <div className="flex items-center gap-3">
+              <div className="w-20 h-20 rounded-lg bg-secondary overflow-hidden flex items-center justify-center border border-border/50">
+                {pubCover ? <img src={pubCover} alt="Cover" className="w-full h-full object-cover" /> : <ImageIcon size={20} className="text-muted-foreground" />}
+              </div>
+              <div className="flex-1">
+                <button onClick={() => coverInputRef.current?.click()} disabled={uploadingCover}
+                  className="bg-secondary text-foreground px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-secondary/70 btn-hover disabled:opacity-50">
+                  {uploadingCover ? "Uploading..." : pubCover ? "Replace cover" : "Upload cover image"}
+                </button>
+                <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={uploadCover} />
+                <p className="text-[10px] text-muted-foreground mt-1">PNG/JPG · max 2MB</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={submitPublish} className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-xs font-medium btn-hover">
+                Publish
+              </button>
+              <button onClick={() => setPublishProject(null)} className="text-xs text-muted-foreground">Cancel</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* GitHub push modal */}
+      <AnimatePresence>
+        {ghProject && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="glass rounded-xl p-4 space-y-3 liquid-chrome border-glow">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-foreground flex items-center gap-2"><GitBranch size={14} className="text-primary" /> Push "{ghProject.name}" to GitHub</p>
+              <button onClick={() => setGhProject(null)} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
+            </div>
+            <input value={repoName} onChange={e => setRepoName(e.target.value.replace(/[^a-zA-Z0-9-]+/g, "-"))} placeholder="repo-name" className="w-full bg-secondary rounded-lg px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />
+            <input value={repoDesc} onChange={e => setRepoDesc(e.target.value)} placeholder="Repo description" className="w-full bg-secondary rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input type="checkbox" checked={repoPrivate} onChange={e => setRepoPrivate(e.target.checked)} className="accent-primary" />
+              Make repository private
+            </label>
+            <div className="flex gap-2">
+              <button onClick={pushToGitHub} disabled={pushing} className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-xs font-medium btn-hover disabled:opacity-50 flex items-center gap-2">
+                {pushing ? <><Loader2 size={12} className="animate-spin" /> Pushing...</> : "Create & push"}
+              </button>
+              <button onClick={() => setGhProject(null)} className="text-xs text-muted-foreground">Cancel</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Referral banner */}
       {profile?.referral_code && (
@@ -212,7 +322,6 @@ const Projects = () => {
         </motion.div>
       )}
 
-      {/* Project list */}
       <div className="grid gap-3">
         {projects.length === 0 ? (
           <div className="glass rounded-xl p-8 text-center">
@@ -222,40 +331,45 @@ const Projects = () => {
         ) : (
           projects.map((p, i) => (
             <motion.div key={p.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-              className="glass rounded-xl p-4 flex flex-wrap items-center gap-3 hover-lift">
+              whileHover={{ scale: 1.005 }}
+              className="glass rounded-xl p-4 flex flex-wrap items-center gap-3 hover-lift liquid-chrome">
               <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center">
-                <FolderKanban size={16} className="text-muted-foreground" />
+                <FolderKanban size={16} className="text-primary" />
               </div>
               <div className="flex-1 min-w-[120px]">
                 <p className="text-sm font-medium text-foreground">{p.name}</p>
-                <p className="text-xs text-muted-foreground">{p.language}{p.description ? ` — ${p.description.slice(0, 40)}` : ""}</p>
+                <p className="text-xs text-muted-foreground">{p.language}{p.description ? ` — ${p.description.replace(/^\[cover:[^\]]+\]\n?/, "").slice(0, 40)}` : ""}</p>
               </div>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor[p.status] || statusColor.Draft}`}>
-                {p.status}
-              </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor[p.status] || statusColor.Draft}`}>{p.status}</span>
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Clock size={12} /> {new Date(p.updated_at).toLocaleDateString()}
               </div>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setViewProject(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground" title="View code">
-                  <Code size={14} />
+              <div className="flex items-center gap-1 flex-wrap">
+                <button onClick={() => navigate(`/projects/${p.id}`)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-primary transition-all" title="View files & preview">
+                  <Eye size={14} />
                 </button>
-                <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground" title="Edit">
+                <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-all" title="Edit info">
                   <Edit3 size={14} />
                 </button>
-                <button onClick={() => downloadProject(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground" title="Download">
+                <button onClick={() => downloadZip(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-all" title="Download ZIP">
                   <Download size={14} />
                 </button>
-                <button onClick={() => setTransferProject(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground" title="Transfer">
+                <button onClick={() => setTransferProject(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-all" title="Transfer">
                   <ArrowRightLeft size={14} />
                 </button>
-                <button onClick={() => pushToGitHub(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground" title="Push to GitHub">
+                <button onClick={() => openGhPush(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-all" title="Push to GitHub">
                   <GitBranch size={14} />
                 </button>
-                <button onClick={() => togglePublish(p.id, p.is_published)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground" title={p.is_published ? "Unpublish" : "Publish"}>
-                  <Globe size={14} className={p.is_published ? "text-primary" : ""} />
-                </button>
-                <button onClick={() => deleteProject(p.id)} className="p-1.5 rounded-lg hover:bg-secondary text-destructive" title="Delete">
+                {p.is_published ? (
+                  <button onClick={() => unpublish(p.id)} className="p-1.5 rounded-lg hover:bg-secondary text-primary transition-all" title="Unpublish">
+                    <Globe size={14} />
+                  </button>
+                ) : (
+                  <button onClick={() => openPublish(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-all" title="Publish to Community">
+                    <Globe size={14} />
+                  </button>
+                )}
+                <button onClick={() => deleteProject(p.id)} className="p-1.5 rounded-lg hover:bg-secondary text-destructive transition-all" title="Delete">
                   <Trash2 size={14} />
                 </button>
               </div>
