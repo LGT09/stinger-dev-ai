@@ -50,7 +50,12 @@ const BannedScreen = ({ reason }: { reason?: string | null }) => (
   </div>
 );
 
-const AppContent = () => {
+const LandingWrapper = () => {
+  const [showAuth, setShowAuth] = useState(false);
+  if (showAuth) return <AuthPage />;
+  return <Landing onGetStarted={() => setShowAuth(true)} />;
+};
+
   const [showSplash, setShowSplash] = useState(true);
   const [splashVisible, setSplashVisible] = useState(true);
   const { session, loading, profile } = useAuth();
