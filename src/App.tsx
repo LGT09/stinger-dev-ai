@@ -56,6 +56,7 @@ const LandingWrapper = () => {
   return <Landing onGetStarted={() => setShowAuth(true)} />;
 };
 
+const AppContent = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [splashVisible, setSplashVisible] = useState(true);
   const { session, loading, profile } = useAuth();
