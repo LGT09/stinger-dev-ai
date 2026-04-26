@@ -1,3 +1,3 @@
-# Welcome to your Lovable project
+# Welcome to Stinger Ai Dev project
 
 TODO: Document your project here.
