@@ -1,3 +1,3 @@
 # Welcome to Stinger Ai Dev project
 
-TODO: Document your project here.
+TODO: Documentation of Stinger Ai Dev coming soon...
