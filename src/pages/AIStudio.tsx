@@ -4,12 +4,13 @@ import {
   Send, Code, Image, Video, Music, Sparkles, Loader2, Copy, Share2,
   FolderPlus, Download, Globe, Bot, Database, AppWindow, Mic, Paperclip,
   Plus, MessageSquare, History, FileCode, Eye,
-  Lightbulb, X, Terminal, Play, FolderTree, File, ChevronRight
+  Lightbulb, X, Terminal, Play, FolderTree, File, ChevronRight, ChevronDown, Cpu
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
+import { AI_MODELS, DEFAULT_MODEL_ID, getModelById } from "@/lib/aiModels";
 
 type AIMode = "chat" | "code" | "image" | "video" | "music";
 
@@ -58,6 +59,7 @@ interface TerminalLine {
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
+const AI_ROUTER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-router`;
 
 const AIStudio = () => {
   const { user, tokenBalance, refreshTokens, isAdmin } = useAuth();
@@ -86,6 +88,8 @@ const AIStudio = () => {
   const [showTerminal, setShowTerminal] = useState(true);
   const [showFileExplorer, setShowFileExplorer] = useState(true);
   const [buildingProject, setBuildingProject] = useState(false);
+  const [selectedModelId, setSelectedModelId] = useState<string>(DEFAULT_MODEL_ID);
+  const [showModelPicker, setShowModelPicker] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
