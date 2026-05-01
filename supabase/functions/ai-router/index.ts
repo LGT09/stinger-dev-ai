@@ -88,7 +88,9 @@ async function proxyAnthropic(apiKey: string | undefined, model: string, message
   if (!upstream.ok || !upstream.body) {
     const t = await upstream.text().catch(() => "");
     console.error("anthropic error", upstream.status, t);
-    return jsonErr(`Anthropic error ${upstream.status}`, 500);
+    let msg = `Anthropic error ${upstream.status}`;
+    try { const j = JSON.parse(t); if (j?.error?.message) msg = `Anthropic: ${j.error.message}`; } catch {}
+    return jsonErr(msg, 500);
   }
 
   const enc = new TextEncoder();
