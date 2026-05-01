@@ -631,6 +631,7 @@ Generate complete, production-ready files. Include all necessary files for the p
           <div className="ml-auto flex items-center gap-1.5">
             <motion.button whileHover={{ scale: 1.1 }} onClick={saveAsProject} className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary" title="Save"><FolderPlus size={14} /></motion.button>
             <motion.button whileHover={{ scale: 1.1 }} onClick={downloadProjectFiles} className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary" title="Download"><Download size={14} /></motion.button>
+            <ModelPicker />
             <div className="text-xs text-muted-foreground flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/5 border border-primary/10 shimmer">
               <Sparkles size={12} className="text-primary" />
               <span className="font-medium relative z-10">{isAdmin ? "∞" : tokenBalance}</span>
@@ -835,6 +836,7 @@ Generate complete, production-ready files. Include all necessary files for the p
           <motion.button whileHover={{ scale: 1.1 }} onClick={saveAsProject} className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary" title="Save"><FolderPlus size={14} /></motion.button>
           <motion.button whileHover={{ scale: 1.1 }} onClick={shareChat} className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary" title="Share"><Share2 size={14} /></motion.button>
           <motion.button whileHover={{ scale: 1.1 }} onClick={downloadChat} className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary" title="Download"><Download size={14} /></motion.button>
+          <ModelPicker />
           <div className="text-xs text-muted-foreground flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/5 border border-primary/10 shimmer">
             <Sparkles size={12} className="text-primary" />
             <span className="font-medium relative z-10">{isAdmin ? "∞" : tokenBalance}</span>
