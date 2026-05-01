@@ -4,12 +4,13 @@ import {
   Send, Code, Image, Video, Music, Sparkles, Loader2, Copy, Share2,
   FolderPlus, Download, Globe, Bot, Database, AppWindow, Mic, Paperclip,
   Plus, MessageSquare, History, FileCode, Eye,
-  Lightbulb, X, Terminal, Play, FolderTree, File, ChevronRight
+  Lightbulb, X, Terminal, Play, FolderTree, File, ChevronRight, ChevronDown, Cpu
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
+import { AI_MODELS, DEFAULT_MODEL_ID, getModelById } from "@/lib/aiModels";
 
 type AIMode = "chat" | "code" | "image" | "video" | "music";
 
@@ -58,6 +59,7 @@ interface TerminalLine {
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
+const AI_ROUTER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-router`;
 
 const AIStudio = () => {
   const { user, tokenBalance, refreshTokens, isAdmin } = useAuth();
@@ -86,6 +88,8 @@ const AIStudio = () => {
   const [showTerminal, setShowTerminal] = useState(true);
   const [showFileExplorer, setShowFileExplorer] = useState(true);
   const [buildingProject, setBuildingProject] = useState(false);
+  const [selectedModelId, setSelectedModelId] = useState<string>(DEFAULT_MODEL_ID);
+  const [showModelPicker, setShowModelPicker] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -275,25 +279,25 @@ Generate complete, production-ready files. Include all necessary files for the p
       const isImageGen = mode === "image";
       const isVideoGen = mode === "video";
       const isMusicGen = mode === "music";
-      let model = "google/gemini-3-flash-preview";
-      if (isImageGen) model = "google/gemini-3.1-flash-image-preview";
-      else if (mode === "code") model = "google/gemini-2.5-pro";
+      const selectedModel = getModelById(selectedModelId);
 
+      // Image mode keeps using the multimodal Lovable AI image model via /chat
+      // Video/music: call generate-media (real provider) instead of chatting
+      let endpoint = AI_ROUTER_URL;
       const requestBody: any = {
+        provider: selectedModel.provider,
+        model: selectedModel.model,
         messages: [
           { role: "system", content: getSystemPrompt() },
           ...newMessages.filter(m => !m.images).map(m => ({ role: m.role, content: m.content })),
         ],
-        model,
       };
 
       if (isImageGen) {
+        endpoint = CHAT_URL;
+        requestBody.model = "google/gemini-3.1-flash-image-preview";
         requestBody.modalities = ["image", "text"];
-      }
-
-      if (isVideoGen || isMusicGen) {
-        // For video/music we use the chat endpoint but with specific prompts
-        requestBody.model = "google/gemini-3-flash-preview";
+        delete requestBody.provider;
       }
 
       if (mode === "code") {
@@ -301,7 +305,7 @@ Generate complete, production-ready files. Include all necessary files for the p
         addTerminalLine("system", `🔨 Building: "${input.slice(0, 80)}..."`);
       }
 
-      const resp = await fetch(CHAT_URL, {
+      const resp = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -558,6 +562,42 @@ Generate complete, production-ready files. Include all necessary files for the p
 
   const ModeIcon = modeConfig[mode].icon;
 
+  // Reusable model picker dropdown
+  const ModelPicker = () => {
+    const current = getModelById(selectedModelId);
+    return (
+      <div className="relative">
+        <button onClick={() => setShowModelPicker(v => !v)}
+          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] bg-secondary/60 hover:bg-secondary text-foreground border border-border/50 max-w-[160px]">
+          <Cpu size={11} className="text-primary flex-shrink-0" />
+          <span className="truncate">{current.label}</span>
+          {current.badge && <span className="text-[9px] px-1 rounded bg-accent/20 text-accent">{current.badge}</span>}
+          <ChevronDown size={10} />
+        </button>
+        <AnimatePresence>
+          {showModelPicker && (
+            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+              className="absolute right-0 top-full mt-1 w-72 max-h-80 overflow-y-auto z-40 glass-strong rounded-xl border border-border/50 shadow-xl p-1">
+              {AI_MODELS.map(m => (
+                <button key={m.id} onClick={() => { setSelectedModelId(m.id); setShowModelPicker(false); toast.success(`Model: ${m.label}`); }}
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition-all flex items-start gap-2 ${selectedModelId === m.id ? "bg-primary/15 text-primary" : "hover:bg-secondary/60 text-foreground"}`}>
+                  <Cpu size={10} className="mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium truncate">{m.label}</span>
+                      {m.badge && <span className="text-[9px] px-1 rounded bg-accent/20 text-accent flex-shrink-0">{m.badge}</span>}
+                    </div>
+                    {m.description && <p className="text-[10px] text-muted-foreground truncate">{m.description}</p>}
+                  </div>
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
   // Code mode layout
   if (mode === "code") {
     return (
@@ -591,6 +631,7 @@ Generate complete, production-ready files. Include all necessary files for the p
           <div className="ml-auto flex items-center gap-1.5">
             <motion.button whileHover={{ scale: 1.1 }} onClick={saveAsProject} className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary" title="Save"><FolderPlus size={14} /></motion.button>
             <motion.button whileHover={{ scale: 1.1 }} onClick={downloadProjectFiles} className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary" title="Download"><Download size={14} /></motion.button>
+            <ModelPicker />
             <div className="text-xs text-muted-foreground flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/5 border border-primary/10 shimmer">
               <Sparkles size={12} className="text-primary" />
               <span className="font-medium relative z-10">{isAdmin ? "∞" : tokenBalance}</span>
@@ -795,6 +836,7 @@ Generate complete, production-ready files. Include all necessary files for the p
           <motion.button whileHover={{ scale: 1.1 }} onClick={saveAsProject} className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary" title="Save"><FolderPlus size={14} /></motion.button>
           <motion.button whileHover={{ scale: 1.1 }} onClick={shareChat} className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary" title="Share"><Share2 size={14} /></motion.button>
           <motion.button whileHover={{ scale: 1.1 }} onClick={downloadChat} className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary" title="Download"><Download size={14} /></motion.button>
+          <ModelPicker />
           <div className="text-xs text-muted-foreground flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/5 border border-primary/10 shimmer">
             <Sparkles size={12} className="text-primary" />
             <span className="font-medium relative z-10">{isAdmin ? "∞" : tokenBalance}</span>
