@@ -139,19 +139,19 @@ async function proxyHostify(model: string, messages: any[]) {
   if (model === "letmegpt") {
     url = "https://api.hostify.indevs.in/api/ai/letmegpt";
     body = { message: lastUser };
-    extract = (d) => d?.result?.answer || d?.answer || d?.message || JSON.stringify(d);
+    extract = (d) => normalizeHostify(d);
   } else if (model === "grok") {
     url = "https://api.hostify.indevs.in/api/ai/grok";
     body = { message: lastUser };
-    extract = (d) => d?.result?.answer || d?.answer || d?.message || JSON.stringify(d);
+    extract = (d) => normalizeHostify(d);
   } else if (model === "gemini") {
     url = "https://api.hostify.indevs.in/api/ai/gemini";
     body = { prompt: lastUser };
-    extract = (d) => d?.result?.answer || d?.answer || d?.text || d?.response || JSON.stringify(d);
+    extract = (d) => normalizeHostify(d);
   } else if (model === "gemini-v2") {
     url = "https://api.hostify.indevs.in/api/ai/gemini-v2";
     body = { prompt: lastUser };
-    extract = (d) => d?.result?.answer || d?.answer || d?.text || d?.response || JSON.stringify(d);
+    extract = (d) => normalizeHostify(d);
   } else if (model === "notegpt-deepseek") {
     // notegpt is a streaming SSE endpoint — passthrough but reformat each line
     const upstream = await fetch("https://api.hostify.indevs.in/api/ai/notegpt", {
@@ -198,12 +198,30 @@ async function proxyHostify(model: string, messages: any[]) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  const raw = await upstream.text();
+  let data: any = {};
+  try { data = JSON.parse(raw); } catch { /* keep raw */ }
   if (!upstream.ok) {
-    const t = await upstream.text().catch(() => "");
-    console.error("hostify error", upstream.status, t);
-    return jsonErr(`Hostify error ${upstream.status}`, 500);
+    console.error("hostify http error", upstream.status, raw.slice(0, 300));
+    const text = `⚠️ Hostify upstream returned ${upstream.status}. The Hostify provider is having issues right now. Try another model.`;
+    return new Response(sseFromText(text), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
   }
-  const data = await upstream.json();
+  if (data && data.success === false) {
+    const text = `⚠️ Hostify model didn't return an answer (${data.message || "unknown error"}). Try another Hostify model like Grok or Gemini.`;
+    return new Response(sseFromText(text), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+  }
   const text = extract(data) || "(empty response)";
   return new Response(sseFromText(text), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+}
+
+function normalizeHostify(d: any): string {
+  if (!d) return "";
+  // Common shapes seen across endpoints
+  if (typeof d.result === "string") return d.result;
+  if (d.result?.answer) return d.result.answer;
+  if (d.answer) return d.answer;
+  if (d.text) return d.text;
+  if (d.response) return d.response;
+  if (d.message) return d.message;
+  return JSON.stringify(d);
 }
