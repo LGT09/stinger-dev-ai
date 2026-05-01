@@ -65,7 +65,9 @@ async function proxyOpenAIShape(url: string, apiKey: string | undefined, model: 
     if (upstream.status === 402) return jsonErr("Credits exhausted.", 402);
     const t = await upstream.text();
     console.error("upstream error", url, upstream.status, t);
-    return jsonErr(`Upstream error ${upstream.status}`, 500);
+    let msg = `Upstream error ${upstream.status}`;
+    try { const j = JSON.parse(t); if (j?.error?.message) msg = j.error.message; } catch {}
+    return jsonErr(msg, upstream.status >= 400 && upstream.status < 600 ? upstream.status : 500);
   }
   return new Response(upstream.body, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
 }
