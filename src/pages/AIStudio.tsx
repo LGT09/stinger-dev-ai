@@ -562,6 +562,42 @@ Generate complete, production-ready files. Include all necessary files for the p
 
   const ModeIcon = modeConfig[mode].icon;
 
+  // Reusable model picker dropdown
+  const ModelPicker = () => {
+    const current = getModelById(selectedModelId);
+    return (
+      <div className="relative">
+        <button onClick={() => setShowModelPicker(v => !v)}
+          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] bg-secondary/60 hover:bg-secondary text-foreground border border-border/50 max-w-[160px]">
+          <Cpu size={11} className="text-primary flex-shrink-0" />
+          <span className="truncate">{current.label}</span>
+          {current.badge && <span className="text-[9px] px-1 rounded bg-accent/20 text-accent">{current.badge}</span>}
+          <ChevronDown size={10} />
+        </button>
+        <AnimatePresence>
+          {showModelPicker && (
+            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+              className="absolute right-0 top-full mt-1 w-72 max-h-80 overflow-y-auto z-40 glass-strong rounded-xl border border-border/50 shadow-xl p-1">
+              {AI_MODELS.map(m => (
+                <button key={m.id} onClick={() => { setSelectedModelId(m.id); setShowModelPicker(false); toast.success(`Model: ${m.label}`); }}
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition-all flex items-start gap-2 ${selectedModelId === m.id ? "bg-primary/15 text-primary" : "hover:bg-secondary/60 text-foreground"}`}>
+                  <Cpu size={10} className="mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium truncate">{m.label}</span>
+                      {m.badge && <span className="text-[9px] px-1 rounded bg-accent/20 text-accent flex-shrink-0">{m.badge}</span>}
+                    </div>
+                    {m.description && <p className="text-[10px] text-muted-foreground truncate">{m.description}</p>}
+                  </div>
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
   // Code mode layout
   if (mode === "code") {
     return (
