@@ -279,25 +279,25 @@ Generate complete, production-ready files. Include all necessary files for the p
       const isImageGen = mode === "image";
       const isVideoGen = mode === "video";
       const isMusicGen = mode === "music";
-      let model = "google/gemini-3-flash-preview";
-      if (isImageGen) model = "google/gemini-3.1-flash-image-preview";
-      else if (mode === "code") model = "google/gemini-2.5-pro";
+      const selectedModel = getModelById(selectedModelId);
 
+      // Image mode keeps using the multimodal Lovable AI image model via /chat
+      // Video/music: call generate-media (real provider) instead of chatting
+      let endpoint = AI_ROUTER_URL;
       const requestBody: any = {
+        provider: selectedModel.provider,
+        model: selectedModel.model,
         messages: [
           { role: "system", content: getSystemPrompt() },
           ...newMessages.filter(m => !m.images).map(m => ({ role: m.role, content: m.content })),
         ],
-        model,
       };
 
       if (isImageGen) {
+        endpoint = CHAT_URL;
+        requestBody.model = "google/gemini-3.1-flash-image-preview";
         requestBody.modalities = ["image", "text"];
-      }
-
-      if (isVideoGen || isMusicGen) {
-        // For video/music we use the chat endpoint but with specific prompts
-        requestBody.model = "google/gemini-3-flash-preview";
+        delete requestBody.provider;
       }
 
       if (mode === "code") {
@@ -305,7 +305,7 @@ Generate complete, production-ready files. Include all necessary files for the p
         addTerminalLine("system", `🔨 Building: "${input.slice(0, 80)}..."`);
       }
 
-      const resp = await fetch(CHAT_URL, {
+      const resp = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
