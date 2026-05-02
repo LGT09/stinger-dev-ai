@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Bot, Code, Image as ImageIcon, Video, Music, FolderKanban, Globe, Zap, Shield, GitBranch, Database, Users, Sparkles, ArrowRight, Check, BookOpen, Facebook } from "lucide-react";
+import { Bot, Code, Image as ImageIcon, Video, Music, FolderKanban, Globe, Zap, Shield, GitBranch, Database, Users, Sparkles, ArrowRight, Check, BookOpen, Share2 } from "lucide-react";
 import logo from "@/assets/logo.png";
 
 interface Props {
@@ -148,7 +148,7 @@ const Landing = ({ onGetStarted }: Props) => {
           </p>
           <a href="https://www.facebook.com/profile.php?id=61573017854384" target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-primary transition-colors">
-            <Facebook size={11} /> Stinger AI Dev on Facebook
+            <Share2 size={11} /> Stinger AI Dev on Facebook
           </a>
         </div>
       </section>
