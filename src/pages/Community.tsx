@@ -69,6 +69,14 @@ const Community = () => {
     (p.description || "").toLowerCase().includes(search.toLowerCase())
   );
 
+  // Extract [cover:url] from description, return clean description + cover url
+  const extractCover = (desc: string | null): { cover: string | null; clean: string } => {
+    if (!desc) return { cover: null, clean: "" };
+    const m = desc.match(/\[cover:(.*?)\]/);
+    if (!m) return { cover: null, clean: desc };
+    return { cover: m[1].trim(), clean: desc.replace(m[0], "").trim() };
+  };
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -114,6 +122,7 @@ const Community = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((app, i) => {
             const author = authors[app.user_id];
+            const { cover, clean } = extractCover(app.description);
             return (
               <motion.div
                 key={app.id}
@@ -123,14 +132,18 @@ const Community = () => {
                 className="glass rounded-xl p-4 hover:glow-cyan transition-all cursor-pointer group hover:scale-[1.02]"
               >
                 <div className="w-full h-24 rounded-lg bg-gradient-to-br from-primary/10 to-accent/10 mb-3 flex items-center justify-center overflow-hidden">
-                  <Globe size={24} className="text-muted-foreground/50 group-hover:text-primary/50 transition-colors" />
+                  {cover ? (
+                    <img src={cover} alt={app.name} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  ) : (
+                    <Globe size={24} className="text-muted-foreground/50 group-hover:text-primary/50 transition-colors" />
+                  )}
                 </div>
                 <p className="text-sm font-medium text-foreground">{app.name}</p>
                 <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
                   <span>by {author?.name || "Anonymous"}</span>
                   {author?.verified && <span className="text-blue-400">✔</span>}
                 </div>
-                <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{app.description || app.language}</p>
+                <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{clean || app.language}</p>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1"><Heart size={12} /> {app.likes}</span>
                   <span className="flex items-center gap-1"><GitFork size={12} /> {app.forks}</span>
