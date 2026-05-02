@@ -193,7 +193,7 @@ const SettingsPage = () => {
       <div className="glass rounded-xl p-4 space-y-3 liquid-chrome">
         <p className="text-xs font-medium text-foreground">Upgrade to Pro</p>
         <p className="text-xs text-muted-foreground">Get 5,000 tokens/month and premium features.</p>
-        <a href="mailto:info@stinger.indevs.in?subject=Stinger Dev Pro Upgrade" className="inline-block bg-primary text-primary-foreground px-4 py-2 rounded-lg text-xs font-medium hover:opacity-90 btn-hover">
+        <a href="https://support.stinger.co.zw?topic=Pro%20Upgrade" target="_blank" rel="noopener noreferrer" className="inline-block bg-primary text-primary-foreground px-4 py-2 rounded-lg text-xs font-medium hover:opacity-90 btn-hover">
           Request Upgrade →
         </a>
       </div>
