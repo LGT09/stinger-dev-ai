@@ -20,7 +20,7 @@ const ContactSupport = () => {
       toast.error("Please fill in all fields");
       return;
     }
-    const mailto = `mailto:info@stinger.indevs.in?cc=traxxiontech@gmail.com&subject=[${category}] ${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+    const mailto = `https://support.stinger.co.zw?topic=${encodeURIComponent("[" + category + "] " + subject)}&body=${encodeURIComponent(message)}`;
     window.location.href = mailto;
     toast.success("Opening email client...");
   };
@@ -37,7 +37,7 @@ const ContactSupport = () => {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass rounded-xl p-5 liquid-chrome hover:glow-yellow transition-all group">
           <Mail size={18} className="text-primary mb-3 group-hover:scale-110 transition-transform" />
           <p className="text-sm font-medium text-foreground">Email Support</p>
-          <a href="mailto:info@stinger.indevs.in" className="text-xs text-primary hover:underline block mt-1">info@stinger.indevs.in</a>
+          <a href="https://support.stinger.co.zw" target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline block mt-1">support.stinger.co.zw</a>
           <a href="mailto:traxxiontech@gmail.com" className="text-xs text-muted-foreground hover:underline block">traxxiontech@gmail.com</a>
         </motion.div>
 
@@ -72,7 +72,7 @@ const ContactSupport = () => {
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass rounded-xl p-5">
         <p className="text-xs font-medium text-foreground mb-3">Connect With Us</p>
         <div className="flex gap-3">
-          <a href="https://www.facebook.com/TraxxionTech" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary text-sm text-foreground hover:bg-primary/10 hover:text-primary transition-all btn-hover">
+          <a href="https://www.facebook.com/profile.php?id=61573017854384" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary text-sm text-foreground hover:bg-primary/10 hover:text-primary transition-all btn-hover">
             <ExternalLink size={12} /> Facebook
           </a>
         </div>

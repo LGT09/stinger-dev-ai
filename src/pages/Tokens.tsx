@@ -29,7 +29,8 @@ const Tokens = () => {
   };
 
   const handlePurchase = (tier: string) => {
-    window.location.href = `mailto:info@stinger.indevs.in?cc=traxxiontech@gmail.com&subject=Token Purchase: ${tier}&body=Hi, I'd like to purchase the ${tier} token package. My email is ${user?.email}`;
+    const url = `https://support.stinger.co.zw?topic=${encodeURIComponent("Token Purchase: " + tier)}&email=${encodeURIComponent(user?.email || "")}`;
+    window.open(url, "_blank");
   };
 
   const copyReferral = () => {
@@ -92,18 +93,29 @@ const Tokens = () => {
             </motion.div>
           ))}
         </div>
-        <p className="text-xs text-muted-foreground mt-3">Contact info@stinger.indevs.in to complete your purchase.</p>
+        <p className="text-xs text-muted-foreground mt-3">Visit <a href="https://support.stinger.co.zw" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">support.stinger.co.zw</a> to complete your purchase.</p>
       </div>
 
-      {/* Upgrade */}
-      <div className="glass rounded-xl p-5 liquid-chrome">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-sm text-muted-foreground">Upgrade to Pro</p>
-          <a href="mailto:info@stinger.indevs.in?cc=traxxiontech@gmail.com&subject=Stinger Dev Pro Upgrade" className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg font-medium hover:opacity-90 btn-hover">
-            Contact to upgrade
-          </a>
+      {/* Upgrade tiers */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="glass rounded-xl p-5 liquid-chrome">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm text-muted-foreground">Upgrade to Pro</p>
+            <a href="https://support.stinger.co.zw?topic=Pro%20Upgrade" target="_blank" rel="noopener noreferrer" className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg font-medium hover:opacity-90 btn-hover">
+              Upgrade
+            </a>
+          </div>
+          <p className="text-xs text-muted-foreground">Pro: 5,000 tokens/month, priority AI, advanced features.</p>
         </div>
-        <p className="text-xs text-muted-foreground">Pro: 5,000 tokens/month, priority AI, advanced features.</p>
+        <div className="glass rounded-xl p-5 liquid-chrome border border-accent/30">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm text-foreground font-medium">Business — $50/mo</p>
+            <a href="https://support.stinger.co.zw?topic=Business%20Upgrade" target="_blank" rel="noopener noreferrer" className="text-xs bg-accent text-accent-foreground px-3 py-1.5 rounded-lg font-medium hover:opacity-90 btn-hover">
+              Go Business
+            </a>
+          </div>
+          <p className="text-xs text-muted-foreground">Unlimited tokens, team seats, white-label exports, dedicated support.</p>
+        </div>
       </div>
 
       {/* Transactions */}

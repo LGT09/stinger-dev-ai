@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Bot, Code, Image as ImageIcon, Video, Music, FolderKanban, Globe, Zap, Shield, GitBranch, Database, Users, Sparkles, ArrowRight, Check } from "lucide-react";
+import { Bot, Code, Image as ImageIcon, Video, Music, FolderKanban, Globe, Zap, Shield, GitBranch, Database, Users, Sparkles, ArrowRight, Check, BookOpen, Share2 } from "lucide-react";
 import logo from "@/assets/logo.png";
 
 interface Props {
@@ -53,6 +53,10 @@ const Landing = ({ onGetStarted }: Props) => {
             <motion.a whileHover={{ scale: 1.05 }} href="#features"
               className="glass px-6 py-3 rounded-xl text-sm font-medium hover:glow-cyan transition-all">
               Explore features
+            </motion.a>
+            <motion.a whileHover={{ scale: 1.05 }} href="/docs"
+              className="glass px-6 py-3 rounded-xl text-sm font-medium hover:glow-cyan transition-all flex items-center gap-2">
+              <BookOpen size={14} /> Documentation
             </motion.a>
           </motion.div>
 
@@ -138,9 +142,15 @@ const Landing = ({ onGetStarted }: Props) => {
             Start building →
           </motion.button>
         </motion.div>
-        <p className="text-[10px] text-muted-foreground mt-6">
-          📧 info@stinger.indevs.in · traxxiontech@gmail.com · 📱 +263 716 857 999
-        </p>
+        <div className="flex flex-col items-center gap-2 mt-6">
+          <p className="text-[10px] text-muted-foreground">
+            📞 +263 716 857 999 · <a href="https://support.stinger.co.zw" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">support.stinger.co.zw</a>
+          </p>
+          <a href="https://www.facebook.com/profile.php?id=61573017854384" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-primary transition-colors">
+            <Share2 size={11} /> Stinger AI Dev on Facebook
+          </a>
+        </div>
       </section>
     </div>
   );

@@ -91,8 +91,8 @@ const Dashboard = () => {
         <div className="text-xs text-muted-foreground space-y-1">
           <p>🔥 Built by <span className="text-foreground font-medium">Vincent Ganiza</span> — Traxxion Tech</p>
           <p>🇿🇼 Made in Zimbabwe with ❤️</p>
-          <p>📧 info@stinger.indevs.in | traxxiontech@gmail.com</p>
-          <a href="https://www.facebook.com/TraxxionTech" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-block mt-1">Facebook →</a>
+          <p>📞 +263 716 857 999 · <a href="https://support.stinger.co.zw" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">support.stinger.co.zw</a></p>
+          <a href="https://www.facebook.com/profile.php?id=61573017854384" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-block mt-1">Facebook →</a>
         </div>
       </motion.div>
 

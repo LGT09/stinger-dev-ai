@@ -59,7 +59,7 @@ const PrivacySecurity = () => (
 
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="glass rounded-xl p-5">
       <p className="text-xs text-muted-foreground">
-        For security concerns or data requests, contact <a href="mailto:info@stinger.indevs.in" className="text-primary hover:underline">info@stinger.indevs.in</a> or <a href="mailto:traxxiontech@gmail.com" className="text-primary hover:underline">traxxiontech@gmail.com</a>
+        For security concerns or data requests, visit <a href="https://support.stinger.co.zw" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">support.stinger.co.zw</a>
       </p>
     </motion.div>
   </div>
