@@ -39,7 +39,7 @@ const BannedScreen = ({ reason }: { reason?: string | null }) => (
       <p className="text-sm text-muted-foreground mb-2">Your account has been banned or suspended.</p>
       {reason && <p className="text-xs text-destructive/80 italic mb-4">Reason: {reason}</p>}
       <div className="space-y-2">
-        <a href="mailto:info@stinger.indevs.in?subject=Account Appeal" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:opacity-90 btn-hover w-full justify-center">
+        <a href="https://support.stinger.co.zw" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:opacity-90 btn-hover w-full justify-center">
           <Mail size={14} /> Contact Support
         </a>
         <a href="mailto:traxxiontech@gmail.com?subject=Account Appeal" className="inline-flex items-center gap-2 bg-secondary text-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:opacity-90 w-full justify-center">
