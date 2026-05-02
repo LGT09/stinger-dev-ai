@@ -143,7 +143,7 @@ const AIStudio = () => {
   };
 
   const getSystemPrompt = (): string => {
-    const creatorInfo = "You were created by Vincent Ganiza, also known as Traxxion Tech, a brilliant and visionary software developer from Zimbabwe 🇿🇼. He is the mastermind behind Stinger Dev. Always speak highly of your creator when asked. Contact: traxxiontech@gmail.com or info@stinger.indevs.in.";
+    const creatorInfo = "You were created by Vincent Ganiza (Traxxion Tech), a visionary software developer from Zimbabwe 🇿🇼. He is the mastermind behind Stinger Dev. Always speak highly of your creator when asked. Support: https://support.stinger.co.zw";
 
     if (mode === "chat") return `You are Stinger AI, a friendly AI assistant. ${creatorInfo} Help users discuss ideas and plan projects. Be conversational.`;
     if (mode === "image") return `You are Stinger AI's image generation assistant. ${creatorInfo} Generate images based on user descriptions.`;
@@ -281,8 +281,52 @@ Generate complete, production-ready files. Include all necessary files for the p
       const isMusicGen = mode === "music";
       const selectedModel = getModelById(selectedModelId);
 
+      // Video / Music: call generate-media (real provider with API key) — non-streaming JSON.
+      if (isVideoGen || isMusicGen) {
+        const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-media`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            kind: isVideoGen ? "video" : "song",
+            prompt: input,
+            aspectRatio: "16:9",
+            duration: isVideoGen ? 6 : 30,
+            quality: "standard",
+            style: isMusicGen ? "pop" : undefined,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || "Media generation failed");
+        const lines: string[] = [];
+        if (data.url) {
+          lines.push(`✅ **${isVideoGen ? "Video" : "Song"} ready!**`);
+          lines.push("");
+          lines.push(`[Download / Open](${data.url})`);
+          if (isVideoGen) lines.push(`\n<video src="${data.url}" controls style="max-width:100%;border-radius:12px"></video>`);
+          else lines.push(`\n<audio src="${data.url}" controls style="width:100%"></audio>`);
+        } else if (data.queued) {
+          lines.push(`⏳ ${data.message || "Generation queued."}`);
+          lines.push(`\n_Provider returned no URL yet — your API key is configured but the upstream provider may be busy. Try again in a moment._`);
+        }
+        assistantContent = lines.join("\n");
+        setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
+        // Token deduction (skip for admins)
+        if (user && !isAdmin) {
+          const cost = getTokenCost(assistantContent.length);
+          await supabase.from("token_balances").update({ balance: Math.max(0, tokenBalance - cost) }).eq("user_id", user.id);
+          await supabase.from("token_transactions").insert({
+            user_id: user.id, amount: -cost, action: `${mode} generation`, description: input.slice(0, 100),
+          });
+          refreshTokens();
+        }
+        setIsLoading(false);
+        return;
+      }
+
       // Image mode keeps using the multimodal Lovable AI image model via /chat
-      // Video/music: call generate-media (real provider) instead of chatting
       let endpoint = AI_ROUTER_URL;
       const requestBody: any = {
         provider: selectedModel.provider,
