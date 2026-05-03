@@ -61,12 +61,13 @@ async function proxyOpenAIShape(url: string, apiKey: string | undefined, model: 
     body: JSON.stringify({ model, messages, stream: true }),
   });
   if (!upstream.ok) {
-    if (upstream.status === 429) return jsonErr("Rate limit exceeded.", 429);
-    if (upstream.status === 402) return jsonErr("Credits exhausted.", 402);
     const t = await upstream.text();
     console.error("upstream error", url, upstream.status, t);
-    let msg = `Upstream error ${upstream.status}`;
-    try { const j = JSON.parse(t); if (j?.error?.message) msg = j.error.message; } catch {}
+    const providerName = url.includes("openai.com") ? "OpenAI" : url.includes("deepseek") ? "DeepSeek" : url.includes("lovable") ? "Lovable AI" : "Provider";
+    let msg = `${providerName} error ${upstream.status}`;
+    try { const j = JSON.parse(t); if (j?.error?.message) msg = `${providerName}: ${j.error.message}`; } catch {}
+    if (upstream.status === 429) msg = `${providerName} rate limit hit — try a different model from the picker.`;
+    if (upstream.status === 402) msg = `${providerName} credits exhausted — add funds at the ${providerName} dashboard or pick another model.`;
     return jsonErr(msg, upstream.status >= 400 && upstream.status < 600 ? upstream.status : 500);
   }
   return new Response(upstream.body, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
