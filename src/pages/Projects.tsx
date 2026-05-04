@@ -218,45 +218,6 @@ const Projects = () => {
     }
   };
 
-  const _legacy_unused_keep_types = async () => {
-    // placeholder to keep diff small
-    try {
-      // 1. create the repo
-      const createRes = await fetch("https://api.github.com/user/repos", {
-        method: "POST",
-        headers: { Authorization: `token ${token}`, "Content-Type": "application/json", Accept: "application/vnd.github+json" },
-        body: JSON.stringify({ name: repoName, description: repoDesc, private: repoPrivate, auto_init: true }),
-      });
-      if (!createRes.ok) {
-        const err = await createRes.json().catch(() => ({}));
-        throw new Error(err.message || `Create failed (${createRes.status})`);
-      }
-      const repo = await createRes.json();
-      const owner = repo.owner.login;
-
-      // 2. upload files
-      const files = parseProjectFiles(ghProject.code_content, `${ghProject.name}.txt`);
-      if (files.length === 0) {
-        files.push({ path: "README.md", content: `# ${ghProject.name}\n\nCreated with Stinger AI Dev.` });
-      }
-      for (const f of files) {
-        // base64 encode (utf-8 safe)
-        const content = btoa(unescape(encodeURIComponent(f.content)));
-        await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/${f.path}`, {
-          method: "PUT",
-          headers: { Authorization: `token ${token}`, "Content-Type": "application/json", Accept: "application/vnd.github+json" },
-          body: JSON.stringify({ message: `Add ${f.path} via Stinger AI Dev`, content }),
-        });
-      }
-      toast.success(`Pushed to github.com/${owner}/${repoName}`);
-      window.open(repo.html_url, "_blank");
-      setGhProject(null);
-    } catch (e: any) {
-      toast.error(e.message || "Push failed");
-    } finally {
-      setPushing(false);
-    }
-  };
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
