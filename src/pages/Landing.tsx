@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import Hero3D from "@/components/Hero3D";
 import { Bot, Code, Image as ImageIcon, Video, Music, FolderKanban, Globe, Zap, Shield, GitBranch, Database, Users, Sparkles, ArrowRight, Check, BookOpen, Share2 } from "lucide-react";
 import logo from "@/assets/logo.png";
 
@@ -25,8 +26,9 @@ const Landing = ({ onGetStarted }: Props) => {
   return (
     <div className="min-h-screen bg-background text-foreground" data-theme="neon">
       {/* Hero */}
-      <section className="relative overflow-hidden liquid-chrome-intense">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-20">
+      <section className="relative overflow-hidden liquid-chrome-intense min-h-[640px]">
+        <Hero3D />
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-20 relative z-10">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3 mb-8">
             <motion.img src={logo} alt="Stinger" className="w-12 h-12" whileHover={{ scale: 1.1, rotate: 6 }} />
             <div>
