@@ -36,8 +36,9 @@ const Projects = () => {
   const [uploadingCover, setUploadingCover] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
-  // GitHub push modal
+  // Push modal (multi-target: github / codeverse / both)
   const [ghProject, setGhProject] = useState<any>(null);
+  const [pushTarget, setPushTarget] = useState<"github" | "codeverse" | "both">("github");
   const [repoName, setRepoName] = useState("");
   const [repoPrivate, setRepoPrivate] = useState(false);
   const [repoDesc, setRepoDesc] = useState("");
@@ -135,21 +136,90 @@ const Projects = () => {
     toast.success(`Downloaded ${project.name}.zip`);
   };
 
-  // GitHub push
+  // Push (GitHub / CodeVerse / Both)
   const openGhPush = (p: any) => {
-    const token = localStorage.getItem("github_token");
-    if (!token) { toast.error("Connect GitHub first in Settings"); return; }
     setGhProject(p);
+    const ghT = localStorage.getItem("github_token");
+    const cvT = localStorage.getItem("codeverse_token");
+    setPushTarget(ghT && cvT ? "both" : ghT ? "github" : cvT ? "codeverse" : "github");
     setRepoName(p.name.replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase());
     setRepoDesc(p.description || `Created with Stinger AI Dev — ${p.language}`);
     setRepoPrivate(false);
   };
 
+  const pushToGitHubInternal = async (token: string) => {
+    const createRes = await fetch("https://api.github.com/user/repos", {
+      method: "POST",
+      headers: { Authorization: `token ${token}`, "Content-Type": "application/json", Accept: "application/vnd.github+json" },
+      body: JSON.stringify({ name: repoName, description: repoDesc, private: repoPrivate, auto_init: true }),
+    });
+    if (!createRes.ok) {
+      const err = await createRes.json().catch(() => ({}));
+      throw new Error(err.message || `GitHub create failed (${createRes.status})`);
+    }
+    const repo = await createRes.json();
+    const owner = repo.owner.login;
+    const files = parseProjectFiles(ghProject.code_content, `${ghProject.name}.txt`);
+    if (files.length === 0) files.push({ path: "README.md", content: `# ${ghProject.name}\n\nCreated with Stinger AI Dev.` });
+    for (const f of files) {
+      const content = btoa(unescape(encodeURIComponent(f.content)));
+      await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/${f.path}`, {
+        method: "PUT",
+        headers: { Authorization: `token ${token}`, "Content-Type": "application/json", Accept: "application/vnd.github+json" },
+        body: JSON.stringify({ message: `Add ${f.path} via Stinger AI Dev`, content }),
+      });
+    }
+    return { url: repo.html_url, owner };
+  };
+
+  const pushToCodeVerseInternal = async () => {
+    const token = localStorage.getItem("codeverse_token") || undefined;
+    const files = parseProjectFiles(ghProject.code_content, `${ghProject.name}.txt`);
+    if (files.length === 0) files.push({ path: "README.md", content: `# ${ghProject.name}\n\nCreated with Stinger AI Dev.` });
+    const res = await supabase.functions.invoke("codeverse-push", {
+      body: { repoName, description: repoDesc, files, userToken: token, isPrivate: repoPrivate },
+    });
+    if (res.error) throw new Error(res.error.message || "CodeVerse push failed");
+    if ((res.data as any)?.error) throw new Error((res.data as any).error);
+    return res.data as any;
+  };
+
   const pushToGitHub = async () => {
-    const token = localStorage.getItem("github_token");
-    if (!token || !ghProject) return;
+    if (!ghProject) return;
     if (!repoName.trim()) { toast.error("Repo name required"); return; }
+
+    const ghToken = localStorage.getItem("github_token");
+    const cvToken = localStorage.getItem("codeverse_token");
+    if ((pushTarget === "github" || pushTarget === "both") && !ghToken) {
+      toast.error("Connect GitHub first in Settings"); return;
+    }
+    if ((pushTarget === "codeverse" || pushTarget === "both") && !cvToken) {
+      toast.error("Connect CodeVerse first (Integrations → CodeVerse)"); return;
+    }
+
     setPushing(true);
+    try {
+      const tasks: Promise<any>[] = [];
+      if (pushTarget === "github" || pushTarget === "both") tasks.push(pushToGitHubInternal(ghToken!));
+      if (pushTarget === "codeverse" || pushTarget === "both") tasks.push(pushToCodeVerseInternal());
+      const results = await Promise.allSettled(tasks);
+      const ok = results.filter(r => r.status === "fulfilled").length;
+      const fails = results.filter(r => r.status === "rejected") as PromiseRejectedResult[];
+      if (ok > 0) {
+        toast.success(`Pushed to ${pushTarget === "both" ? `${ok}/2 targets` : pushTarget}`);
+        results.forEach(r => { if (r.status === "fulfilled" && (r as any).value?.url) window.open((r as any).value.url, "_blank"); });
+      }
+      fails.forEach(f => toast.error(f.reason?.message || "Push failed"));
+      if (fails.length === 0) setGhProject(null);
+    } catch (e: any) {
+      toast.error(e.message || "Push failed");
+    } finally {
+      setPushing(false);
+    }
+  };
+
+  const _legacy_unused_keep_types = async () => {
+    // placeholder to keep diff small
     try {
       // 1. create the repo
       const createRes = await fetch("https://api.github.com/user/repos", {
