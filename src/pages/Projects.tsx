@@ -36,8 +36,9 @@ const Projects = () => {
   const [uploadingCover, setUploadingCover] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
-  // GitHub push modal
+  // Push modal (multi-target: github / codeverse / both)
   const [ghProject, setGhProject] = useState<any>(null);
+  const [pushTarget, setPushTarget] = useState<"github" | "codeverse" | "both">("github");
   const [repoName, setRepoName] = useState("");
   const [repoPrivate, setRepoPrivate] = useState(false);
   const [repoDesc, setRepoDesc] = useState("");
@@ -135,58 +136,88 @@ const Projects = () => {
     toast.success(`Downloaded ${project.name}.zip`);
   };
 
-  // GitHub push
+  // Push (GitHub / CodeVerse / Both)
   const openGhPush = (p: any) => {
-    const token = localStorage.getItem("github_token");
-    if (!token) { toast.error("Connect GitHub first in Settings"); return; }
     setGhProject(p);
+    const ghT = localStorage.getItem("github_token");
+    const cvT = localStorage.getItem("codeverse_token");
+    setPushTarget(ghT && cvT ? "both" : ghT ? "github" : cvT ? "codeverse" : "github");
     setRepoName(p.name.replace(/[^a-zA-Z0-9-]+/g, "-").toLowerCase());
     setRepoDesc(p.description || `Created with Stinger AI Dev — ${p.language}`);
     setRepoPrivate(false);
   };
 
+  const pushToGitHubInternal = async (token: string) => {
+    const createRes = await fetch("https://api.github.com/user/repos", {
+      method: "POST",
+      headers: { Authorization: `token ${token}`, "Content-Type": "application/json", Accept: "application/vnd.github+json" },
+      body: JSON.stringify({ name: repoName, description: repoDesc, private: repoPrivate, auto_init: true }),
+    });
+    if (!createRes.ok) {
+      const err = await createRes.json().catch(() => ({}));
+      throw new Error(err.message || `GitHub create failed (${createRes.status})`);
+    }
+    const repo = await createRes.json();
+    const owner = repo.owner.login;
+    const files = parseProjectFiles(ghProject.code_content, `${ghProject.name}.txt`);
+    if (files.length === 0) files.push({ path: "README.md", content: `# ${ghProject.name}\n\nCreated with Stinger AI Dev.` });
+    for (const f of files) {
+      const content = btoa(unescape(encodeURIComponent(f.content)));
+      await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/${f.path}`, {
+        method: "PUT",
+        headers: { Authorization: `token ${token}`, "Content-Type": "application/json", Accept: "application/vnd.github+json" },
+        body: JSON.stringify({ message: `Add ${f.path} via Stinger AI Dev`, content }),
+      });
+    }
+    return { url: repo.html_url, owner };
+  };
+
+  const pushToCodeVerseInternal = async () => {
+    const token = localStorage.getItem("codeverse_token") || undefined;
+    const files = parseProjectFiles(ghProject.code_content, `${ghProject.name}.txt`);
+    if (files.length === 0) files.push({ path: "README.md", content: `# ${ghProject.name}\n\nCreated with Stinger AI Dev.` });
+    const res = await supabase.functions.invoke("codeverse-push", {
+      body: { repoName, description: repoDesc, files, userToken: token, isPrivate: repoPrivate },
+    });
+    if (res.error) throw new Error(res.error.message || "CodeVerse push failed");
+    if ((res.data as any)?.error) throw new Error((res.data as any).error);
+    return res.data as any;
+  };
+
   const pushToGitHub = async () => {
-    const token = localStorage.getItem("github_token");
-    if (!token || !ghProject) return;
+    if (!ghProject) return;
     if (!repoName.trim()) { toast.error("Repo name required"); return; }
+
+    const ghToken = localStorage.getItem("github_token");
+    const cvToken = localStorage.getItem("codeverse_token");
+    if ((pushTarget === "github" || pushTarget === "both") && !ghToken) {
+      toast.error("Connect GitHub first in Settings"); return;
+    }
+    if ((pushTarget === "codeverse" || pushTarget === "both") && !cvToken) {
+      toast.error("Connect CodeVerse first (Integrations → CodeVerse)"); return;
+    }
+
     setPushing(true);
     try {
-      // 1. create the repo
-      const createRes = await fetch("https://api.github.com/user/repos", {
-        method: "POST",
-        headers: { Authorization: `token ${token}`, "Content-Type": "application/json", Accept: "application/vnd.github+json" },
-        body: JSON.stringify({ name: repoName, description: repoDesc, private: repoPrivate, auto_init: true }),
-      });
-      if (!createRes.ok) {
-        const err = await createRes.json().catch(() => ({}));
-        throw new Error(err.message || `Create failed (${createRes.status})`);
+      const tasks: Promise<any>[] = [];
+      if (pushTarget === "github" || pushTarget === "both") tasks.push(pushToGitHubInternal(ghToken!));
+      if (pushTarget === "codeverse" || pushTarget === "both") tasks.push(pushToCodeVerseInternal());
+      const results = await Promise.allSettled(tasks);
+      const ok = results.filter(r => r.status === "fulfilled").length;
+      const fails = results.filter(r => r.status === "rejected") as PromiseRejectedResult[];
+      if (ok > 0) {
+        toast.success(`Pushed to ${pushTarget === "both" ? `${ok}/2 targets` : pushTarget}`);
+        results.forEach(r => { if (r.status === "fulfilled" && (r as any).value?.url) window.open((r as any).value.url, "_blank"); });
       }
-      const repo = await createRes.json();
-      const owner = repo.owner.login;
-
-      // 2. upload files
-      const files = parseProjectFiles(ghProject.code_content, `${ghProject.name}.txt`);
-      if (files.length === 0) {
-        files.push({ path: "README.md", content: `# ${ghProject.name}\n\nCreated with Stinger AI Dev.` });
-      }
-      for (const f of files) {
-        // base64 encode (utf-8 safe)
-        const content = btoa(unescape(encodeURIComponent(f.content)));
-        await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/${f.path}`, {
-          method: "PUT",
-          headers: { Authorization: `token ${token}`, "Content-Type": "application/json", Accept: "application/vnd.github+json" },
-          body: JSON.stringify({ message: `Add ${f.path} via Stinger AI Dev`, content }),
-        });
-      }
-      toast.success(`Pushed to github.com/${owner}/${repoName}`);
-      window.open(repo.html_url, "_blank");
-      setGhProject(null);
+      fails.forEach(f => toast.error(f.reason?.message || "Push failed"));
+      if (fails.length === 0) setGhProject(null);
     } catch (e: any) {
       toast.error(e.message || "Push failed");
     } finally {
       setPushing(false);
     }
   };
+
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -288,8 +319,23 @@ const Projects = () => {
         {ghProject && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="glass rounded-xl p-4 space-y-3 liquid-chrome border-glow">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-foreground flex items-center gap-2"><GitBranch size={14} className="text-primary" /> Push "{ghProject.name}" to GitHub</p>
+              <p className="text-sm font-medium text-foreground flex items-center gap-2"><GitBranch size={14} className="text-primary" /> Push "{ghProject.name}"</p>
               <button onClick={() => setGhProject(null)} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground mb-1.5">Push target</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {([
+                  { id: "github", label: "GitHub" },
+                  { id: "codeverse", label: "CodeVerse" },
+                  { id: "both", label: "Both" },
+                ] as const).map(opt => (
+                  <button key={opt.id} onClick={() => setPushTarget(opt.id)}
+                    className={`px-2 py-1.5 rounded-lg text-[11px] font-medium transition-all border ${pushTarget === opt.id ? "bg-primary/15 text-primary border-primary/40" : "bg-secondary/50 text-muted-foreground border-border/40 hover:bg-secondary"}`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <input value={repoName} onChange={e => setRepoName(e.target.value.replace(/[^a-zA-Z0-9-]+/g, "-"))} placeholder="repo-name" className="w-full bg-secondary rounded-lg px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />
             <input value={repoDesc} onChange={e => setRepoDesc(e.target.value)} placeholder="Repo description" className="w-full bg-secondary rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />

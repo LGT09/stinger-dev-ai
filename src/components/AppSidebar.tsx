@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, Bot, FolderKanban, Globe, CreditCard,
   Settings, ChevronLeft, ChevronRight, Zap, Shield, Book,
-  Mail, Lock, Key, Users
+  Mail, Lock, Key, Users, GitBranch
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import logo from "@/assets/logo.png";
@@ -20,6 +20,7 @@ const AppSidebar = () => {
     { icon: Bot, label: "AI Studio", path: "/ai" },
     { icon: FolderKanban, label: "Projects", path: "/projects" },
     { icon: Globe, label: "Community", path: "/community" },
+    { icon: GitBranch, label: "CodeVerse", path: "/integrations/codeverse" },
     { icon: CreditCard, label: "Tokens", path: "/tokens" },
     { icon: Key, label: "Secrets", path: "/secrets" },
     { icon: Users, label: "Workspace", path: "/workspace" },

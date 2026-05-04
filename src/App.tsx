@@ -25,6 +25,7 @@ import SecretsManager from "@/pages/SecretsManager";
 import Workspace from "@/pages/Workspace";
 import ProjectViewer from "@/pages/ProjectViewer";
 import SupabaseIntegration from "@/pages/SupabaseIntegration";
+import CodeVerseIntegration from "@/pages/CodeVerseIntegration";
 import Landing from "@/pages/Landing";
 import NotFound from "@/pages/NotFound";
 import { ShieldAlert, Mail } from "lucide-react";
@@ -111,6 +112,7 @@ const AppContent = () => {
           <Route path="/projects/:id" element={<ProjectViewer />} />
           <Route path="/community" element={<Community />} />
           <Route path="/integrations/supabase" element={<SupabaseIntegration />} />
+          <Route path="/integrations/codeverse" element={<CodeVerseIntegration />} />
           <Route path="/tokens" element={<Tokens />} />
           <Route path="/secrets" element={<SecretsManager />} />
           <Route path="/workspace" element={<Workspace />} />

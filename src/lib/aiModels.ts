@@ -1,4 +1,4 @@
-export type AIProvider = "lovable" | "openai" | "deepseek" | "anthropic";
+export type AIProvider = "lovable" | "openai" | "deepseek" | "anthropic" | "hostify";
 
 export interface AIModelOption {
   id: string;            // unique key used in UI
@@ -11,6 +11,17 @@ export interface AIModelOption {
 }
 
 export const AI_MODELS: AIModelOption[] = [
+  // Hostify (free, no key required) — primary provider
+  { id: "hostify-letmegpt",       provider: "hostify", model: "letmegpt",         label: "LetMeGPT",        badge: "Hostify", description: "Hostify general chat — fast & free" },
+  { id: "hostify-grok",           provider: "hostify", model: "grok",             label: "Grok",            badge: "Hostify", description: "Grok-style assistant via Hostify" },
+  { id: "hostify-gemini",         provider: "hostify", model: "gemini",           label: "Gemini (Hostify)",badge: "Hostify", description: "Google Gemini via Hostify" },
+  { id: "hostify-gemini-v2",      provider: "hostify", model: "gemini-v2",        label: "Gemini v2",       badge: "Hostify", description: "Gemini v2 via Hostify" },
+  { id: "hostify-deepseek-r1",    provider: "hostify", model: "notegpt-deepseek", label: "DeepSeek R1",     badge: "Hostify", description: "DeepSeek R1 deep-think via Hostify (streaming)" },
+
+  // Lovable AI Gateway (used for image generation always)
+  { id: "lovable-gemini-flash",   provider: "lovable", model: "google/gemini-3-flash-preview", label: "Gemini 3 Flash", badge: "Lovable", description: "Lovable AI gateway — fast" },
+  { id: "lovable-gemini-pro",     provider: "lovable", model: "google/gemini-2.5-pro",         label: "Gemini 2.5 Pro", badge: "Lovable", description: "Lovable AI gateway — top quality" },
+
   // OpenAI direct
   { id: "openai-gpt-4o",          provider: "openai",  model: "gpt-4o",                         label: "GPT-4o",         description: "OpenAI flagship multimodal" },
   { id: "openai-gpt-4o-mini",     provider: "openai",  model: "gpt-4o-mini",                    label: "GPT-4o Mini",    description: "Fast & cheap OpenAI" },
@@ -26,7 +37,7 @@ export const AI_MODELS: AIModelOption[] = [
   { id: "deepseek-reasoner",      provider: "deepseek", model: "deepseek-reasoner",             label: "DeepSeek R1",    description: "Step-by-step reasoning" },
 ];
 
-export const DEFAULT_MODEL_ID = "openai-gpt-4o-mini";
+export const DEFAULT_MODEL_ID = "hostify-letmegpt";
 
 export function getModelById(id: string): AIModelOption {
   return AI_MODELS.find(m => m.id === id) || AI_MODELS[0];
