@@ -319,8 +319,23 @@ const Projects = () => {
         {ghProject && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="glass rounded-xl p-4 space-y-3 liquid-chrome border-glow">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-foreground flex items-center gap-2"><GitBranch size={14} className="text-primary" /> Push "{ghProject.name}" to GitHub</p>
+              <p className="text-sm font-medium text-foreground flex items-center gap-2"><GitBranch size={14} className="text-primary" /> Push "{ghProject.name}"</p>
               <button onClick={() => setGhProject(null)} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground mb-1.5">Push target</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {([
+                  { id: "github", label: "GitHub" },
+                  { id: "codeverse", label: "CodeVerse" },
+                  { id: "both", label: "Both" },
+                ] as const).map(opt => (
+                  <button key={opt.id} onClick={() => setPushTarget(opt.id)}
+                    className={`px-2 py-1.5 rounded-lg text-[11px] font-medium transition-all border ${pushTarget === opt.id ? "bg-primary/15 text-primary border-primary/40" : "bg-secondary/50 text-muted-foreground border-border/40 hover:bg-secondary"}`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <input value={repoName} onChange={e => setRepoName(e.target.value.replace(/[^a-zA-Z0-9-]+/g, "-"))} placeholder="repo-name" className="w-full bg-secondary rounded-lg px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />
             <input value={repoDesc} onChange={e => setRepoDesc(e.target.value)} placeholder="Repo description" className="w-full bg-secondary rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50" />
