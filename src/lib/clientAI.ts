@@ -52,7 +52,9 @@ export async function streamQvac(opts: {
 }) {
   try {
     // Lazy-load — package is heavy & optional.
-    const sdk: any = await import(/* @vite-ignore */ "@qvac/sdk").catch(() => null);
+    // Use a string variable so TS doesn't try to resolve the optional package at build time.
+    const pkg = "@qvac/sdk";
+    const sdk: any = await import(/* @vite-ignore */ pkg).catch(() => null);
     if (!sdk?.loadModel || !sdk?.completion) {
       throw new Error("Qvac SDK not installed in this build. Pick another model — Qvac runs fully on-device and requires the @qvac/sdk package to be bundled.");
     }
