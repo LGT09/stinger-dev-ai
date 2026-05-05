@@ -10,7 +10,8 @@ const corsHeaders = {
  * frontend SSE parser (data: {choices:[{delta:{content}}]} ... [DONE]) keeps working.
  *
  * Body: { provider, model, messages: [{role,content}], stream?: boolean }
- * provider: "lovable" | "openai" | "deepseek" | "anthropic" | "hostify"
+ * provider: "lovable" | "deepseek" | "anthropic"
+ * (Puter & Qvac run client-side only and never reach this function.)
  */
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -23,10 +24,8 @@ serve(async (req) => {
 
     switch (provider) {
       case "lovable":   return await proxyOpenAIShape("https://ai.gateway.lovable.dev/v1/chat/completions", Deno.env.get("LOVABLE_API_KEY"), model || "google/gemini-3-flash-preview", messages);
-      case "openai":    return await proxyOpenAIShape("https://api.openai.com/v1/chat/completions",          Deno.env.get("OPENAI_API_KEY"),  model || "gpt-4o-mini",                    messages);
       case "deepseek":  return await proxyOpenAIShape("https://api.deepseek.com/v1/chat/completions",        Deno.env.get("DEEPSEEK_API_KEY"),model || "deepseek-chat",                  messages);
       case "anthropic": return await proxyAnthropic(Deno.env.get("ANTHROPIC_API_KEY"), model || "claude-3-5-sonnet-20241022", messages);
-      case "hostify":   return await proxyHostify(model || "letmegpt", messages);
       default:          return jsonErr(`Unknown provider: ${provider}`, 400);
     }
   } catch (e: any) {

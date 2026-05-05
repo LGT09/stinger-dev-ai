@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Moon, Sun, Monitor, Zap, LogOut, User, Share2, Copy, Camera, Waves, TreePine, Sunset, GitBranch, ExternalLink } from "lucide-react";
+import { Moon, Sun, Monitor, Zap, LogOut, User, Share2, Copy, Camera, Waves, TreePine, Sunset, GitBranch, ExternalLink, Fingerprint, Activity, Trash2, MapPin, Smartphone } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { registerPasskey, supportsBiometric } from "@/lib/biometric";
 
 type Theme = "system" | "light" | "dark" | "neon" | "ocean" | "sunset" | "forest";
 
@@ -27,6 +28,10 @@ const SettingsPage = () => {
   const [githubToken, setGithubToken] = useState(() => localStorage.getItem("github_token") || "");
   const [githubConnected, setGithubConnected] = useState(() => !!localStorage.getItem("github_token"));
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [activity, setActivity] = useState<any[]>([]);
+  const [passkeys, setPasskeys] = useState<any[]>([]);
+  const [enrolling, setEnrolling] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -34,6 +39,40 @@ const SettingsPage = () => {
       setAvatarUrl(profile.avatar_url || "");
     }
   }, [profile]);
+
+  const loadSessions = async () => {
+    if (!user) return;
+    const [s, a, p] = await Promise.all([
+      supabase.from("user_sessions").select("*").eq("user_id", user.id).order("last_seen_at", { ascending: false }).limit(10),
+      supabase.from("user_activity").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20),
+      supabase.from("user_passkeys").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+    ]);
+    setSessions(s.data || []);
+    setActivity(a.data || []);
+    setPasskeys(p.data || []);
+  };
+  useEffect(() => { loadSessions(); }, [user?.id]);
+
+  const enrollPasskey = async () => {
+    if (!supportsBiometric()) { toast.error("Your browser doesn't support passkeys"); return; }
+    setEnrolling(true);
+    try {
+      await registerPasskey(navigator.userAgent.match(/(\w+)\//)?.[1] || "Device");
+      toast.success("Passkey enrolled — you can now sign in with biometrics!");
+      loadSessions();
+    } catch (e: any) { toast.error(e.message || "Failed to enroll"); }
+    finally { setEnrolling(false); }
+  };
+
+  const removePasskey = async (id: string) => {
+    await supabase.from("user_passkeys").delete().eq("id", id);
+    toast.success("Passkey removed"); loadSessions();
+  };
+
+  const revokeSession = async (id: string) => {
+    await supabase.from("user_sessions").delete().eq("id", id);
+    toast.success("Session revoked"); loadSessions();
+  };
 
   useEffect(() => {
     const root = document.documentElement;
@@ -196,6 +235,71 @@ const SettingsPage = () => {
         <a href="https://support.stinger.co.zw?topic=Pro%20Upgrade" target="_blank" rel="noopener noreferrer" className="inline-block bg-primary text-primary-foreground px-4 py-2 rounded-lg text-xs font-medium hover:opacity-90 btn-hover">
           Request Upgrade →
         </a>
+      </div>
+
+      {/* Biometric / Passkeys */}
+      <div className="glass rounded-xl p-4 space-y-3 liquid-chrome">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2"><Fingerprint size={14} className="text-primary" />
+            <p className="text-xs font-medium text-foreground">Biometric sign-in (Passkeys)</p></div>
+          <button onClick={enrollPasskey} disabled={enrolling}
+            className="bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-xs font-medium btn-hover disabled:opacity-50">
+            {enrolling ? "Enrolling…" : "+ Add passkey"}
+          </button>
+        </div>
+        {passkeys.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No passkeys yet. Add one to sign in with Face ID, Touch ID or Windows Hello.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {passkeys.map(pk => (
+              <div key={pk.id} className="flex items-center justify-between bg-secondary/50 rounded-lg px-3 py-2">
+                <div className="text-xs">
+                  <p className="text-foreground font-medium">{pk.device_name}</p>
+                  <p className="text-muted-foreground">Added {new Date(pk.created_at).toLocaleDateString()}</p>
+                </div>
+                <button onClick={() => removePasskey(pk.id)} className="p-1.5 rounded text-destructive hover:bg-destructive/10"><Trash2 size={12} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Active sessions */}
+      <div className="glass rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2"><Smartphone size={14} className="text-primary" />
+          <p className="text-xs font-medium text-foreground">Active sessions & devices</p></div>
+        {sessions.length === 0 ? <p className="text-xs text-muted-foreground">No sessions recorded yet.</p> : (
+          <div className="space-y-1.5">
+            {sessions.map(s => (
+              <div key={s.id} className="flex items-center justify-between bg-secondary/50 rounded-lg px-3 py-2">
+                <div className="text-xs space-y-0.5">
+                  <p className="text-foreground font-medium">{s.browser || "?"} on {s.os || "?"} · {s.device || "?"}</p>
+                  <p className="text-muted-foreground flex items-center gap-1"><MapPin size={10} />
+                    {[s.city, s.country].filter(Boolean).join(", ") || s.ip_address || "Unknown location"}
+                  </p>
+                  <p className="text-muted-foreground">Last seen {new Date(s.last_seen_at).toLocaleString()}</p>
+                </div>
+                <button onClick={() => revokeSession(s.id)} className="p-1.5 rounded text-destructive hover:bg-destructive/10"><Trash2 size={12} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recent activity */}
+      <div className="glass rounded-xl p-4 space-y-2">
+        <div className="flex items-center gap-2"><Activity size={14} className="text-primary" />
+          <p className="text-xs font-medium text-foreground">Recent activity</p></div>
+        {activity.length === 0 ? <p className="text-xs text-muted-foreground">No activity yet.</p> : (
+          <div className="max-h-48 overflow-y-auto space-y-1">
+            {activity.map(a => (
+              <div key={a.id} className="flex items-center justify-between text-xs py-1 border-b border-border/30">
+                <span className="text-foreground">{a.action}{a.path ? ` · ${a.path}` : ""}</span>
+                <span className="text-muted-foreground">{new Date(a.created_at).toLocaleTimeString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <button onClick={signOut} className="flex items-center gap-2 text-sm text-destructive hover:underline hover:translate-x-1 transition-transform">

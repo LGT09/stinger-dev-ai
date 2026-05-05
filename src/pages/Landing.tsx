@@ -1,4 +1,5 @@
-import { motion } from "framer-motion";
+import { useRef } from "react";
+import { motion, useScroll, useTransform } from "framer-motion";
 import Hero3D from "@/components/Hero3D";
 import { Bot, Code, Image as ImageIcon, Video, Music, FolderKanban, Globe, Zap, Shield, GitBranch, Database, Users, Sparkles, ArrowRight, Check, BookOpen, Share2 } from "lucide-react";
 import logo from "@/assets/logo.png";
@@ -23,12 +24,30 @@ const features = [
 ];
 
 const Landing = ({ onGetStarted }: Props) => {
+  const heroRef = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
+  const heroY = useTransform(scrollYProgress, [0, 1], [0, -120]);
+  const heroScale = useTransform(scrollYProgress, [0, 1], [1, 1.15]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
+
+  const { scrollYProgress: pageProgress } = useScroll();
+  const bgY = useTransform(pageProgress, [0, 1], [0, -200]);
+
   return (
-    <div className="min-h-screen bg-background text-foreground" data-theme="neon">
+    <div className="min-h-screen bg-background text-foreground relative overflow-x-hidden" data-theme="neon">
+      {/* Parallax background blobs */}
+      <motion.div style={{ y: bgY }} aria-hidden className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full bg-primary/20 blur-[120px]" />
+        <div className="absolute top-[30%] -right-40 w-[400px] h-[400px] rounded-full bg-accent/20 blur-[120px]" />
+        <div className="absolute bottom-0 left-1/3 w-[600px] h-[600px] rounded-full bg-purple-500/10 blur-[140px]" />
+      </motion.div>
+
       {/* Hero */}
-      <section className="relative overflow-hidden liquid-chrome-intense min-h-[640px]">
-        <Hero3D />
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-20 relative z-10">
+      <section ref={heroRef} className="relative overflow-hidden liquid-chrome-intense min-h-[640px]">
+        <motion.div style={{ scale: heroScale, opacity: heroOpacity }} className="absolute inset-0">
+          <Hero3D />
+        </motion.div>
+        <motion.div style={{ y: heroY }} className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-20 relative z-10">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3 mb-8">
             <motion.img src={logo} alt="Stinger" className="w-12 h-12" whileHover={{ scale: 1.1, rotate: 6 }} />
             <div>
@@ -77,7 +96,7 @@ const Landing = ({ onGetStarted }: Props) => {
               </motion.div>
             ))}
           </div>
-        </div>
+        </motion.div>
       </section>
 
       {/* Features */}
