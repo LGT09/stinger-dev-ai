@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { startSession, touchSession, logActivity } from "@/lib/tracking";
 
 interface Profile {
   id: string;
@@ -66,6 +67,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (session?.user) {
         setTimeout(async () => {
           await Promise.all([fetchProfile(session.user.id), fetchRoles(session.user.id), fetchTokens(session.user.id)]);
+          if (_event === "SIGNED_IN") {
+            startSession(session.user.id);
+            logActivity(session.user.id, "sign_in");
+          }
           setLoading(false);
         }, 0);
       } else {
@@ -80,13 +85,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        Promise.all([fetchProfile(session.user.id), fetchRoles(session.user.id), fetchTokens(session.user.id)]).then(() => setLoading(false));
+        Promise.all([fetchProfile(session.user.id), fetchRoles(session.user.id), fetchTokens(session.user.id)]).then(() => {
+          touchSession();
+          setLoading(false);
+        });
       } else {
         setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Touch session every 60s while page is open
+    const interval = setInterval(() => { touchSession(); }, 60_000);
+    window.addEventListener("focus", touchSession);
+
+    return () => { subscription.unsubscribe(); clearInterval(interval); window.removeEventListener("focus", touchSession); };
   }, []);
 
   const signOut = async () => { await supabase.auth.signOut(); };
