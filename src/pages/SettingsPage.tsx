@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Moon, Sun, Monitor, Zap, LogOut, User, Share2, Copy, Camera, Waves, TreePine, Sunset, GitBranch, ExternalLink } from "lucide-react";
+import { Moon, Sun, Monitor, Zap, LogOut, User, Share2, Copy, Camera, Waves, TreePine, Sunset, GitBranch, ExternalLink, Fingerprint, Activity, Trash2, MapPin, Smartphone } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { registerPasskey, supportsBiometric } from "@/lib/biometric";
 
 type Theme = "system" | "light" | "dark" | "neon" | "ocean" | "sunset" | "forest";
 
@@ -27,6 +28,10 @@ const SettingsPage = () => {
   const [githubToken, setGithubToken] = useState(() => localStorage.getItem("github_token") || "");
   const [githubConnected, setGithubConnected] = useState(() => !!localStorage.getItem("github_token"));
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [activity, setActivity] = useState<any[]>([]);
+  const [passkeys, setPasskeys] = useState<any[]>([]);
+  const [enrolling, setEnrolling] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -34,6 +39,40 @@ const SettingsPage = () => {
       setAvatarUrl(profile.avatar_url || "");
     }
   }, [profile]);
+
+  const loadSessions = async () => {
+    if (!user) return;
+    const [s, a, p] = await Promise.all([
+      supabase.from("user_sessions").select("*").eq("user_id", user.id).order("last_seen_at", { ascending: false }).limit(10),
+      supabase.from("user_activity").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20),
+      supabase.from("user_passkeys").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+    ]);
+    setSessions(s.data || []);
+    setActivity(a.data || []);
+    setPasskeys(p.data || []);
+  };
+  useEffect(() => { loadSessions(); }, [user?.id]);
+
+  const enrollPasskey = async () => {
+    if (!supportsBiometric()) { toast.error("Your browser doesn't support passkeys"); return; }
+    setEnrolling(true);
+    try {
+      await registerPasskey(navigator.userAgent.match(/(\w+)\//)?.[1] || "Device");
+      toast.success("Passkey enrolled — you can now sign in with biometrics!");
+      loadSessions();
+    } catch (e: any) { toast.error(e.message || "Failed to enroll"); }
+    finally { setEnrolling(false); }
+  };
+
+  const removePasskey = async (id: string) => {
+    await supabase.from("user_passkeys").delete().eq("id", id);
+    toast.success("Passkey removed"); loadSessions();
+  };
+
+  const revokeSession = async (id: string) => {
+    await supabase.from("user_sessions").delete().eq("id", id);
+    toast.success("Session revoked"); loadSessions();
+  };
 
   useEffect(() => {
     const root = document.documentElement;
