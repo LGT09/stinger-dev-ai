@@ -22,36 +22,59 @@ serve(async (req) => {
     const token = userToken || Deno.env.get("CODEVERSE_API_TOKEN");
     if (!token) return json({ error: "CodeVerse token not configured. Add it in CodeVerse Integration." }, 400);
 
-    const base = "https://codeverse.stinger.co.zw/api";
+    // CodeVerse mirrors the GitHub REST API shape.
+    const base = "https://codeverse.stinger.co.zw/api/v1";
+    const authHdr = { Authorization: `token ${token}`, "Content-Type": "application/json", Accept: "application/json" };
 
-    // 1. Create the repo
-    const createRes = await fetch(`${base}/repos`, {
+    // 1. Look up the authenticated user (GitHub: GET /user)
+    let owner = "user";
+    try {
+      const meRes = await fetch(`${base}/user`, { headers: authHdr });
+      if (meRes.ok) {
+        const me = await meRes.json();
+        owner = me?.login || me?.username || me?.name || owner;
+      } else { await meRes.text(); }
+    } catch { /* fall back */ }
+
+    // 2. Create the repo (GitHub: POST /user/repos)
+    const createRes = await fetch(`${base}/user/repos`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ name: repoName, description: description || `Pushed from Stinger AI Dev`, private: !!isPrivate }),
+      headers: authHdr,
+      body: JSON.stringify({ name: repoName, description: description || `Pushed from Stinger AI Dev`, private: !!isPrivate, auto_init: true }),
     });
-    let repo: any = {};
     const createTxt = await createRes.text();
+    let repo: any = {};
     try { repo = JSON.parse(createTxt); } catch {}
-    if (!createRes.ok && createRes.status !== 409) {
+    // 422 = already exists (GitHub semantics) — that's fine, keep going.
+    if (!createRes.ok && createRes.status !== 422 && createRes.status !== 409) {
       console.error("CodeVerse create repo failed", createRes.status, createTxt);
-      return json({ error: `CodeVerse: ${repo?.message || createTxt || createRes.status}` }, createRes.status);
+      return json({ error: `CodeVerse: ${repo?.message || createTxt || createRes.status}` }, 200);
     }
 
-    // 2. Upload files
+    // 3. Upload files (GitHub: PUT /repos/{owner}/{repo}/contents/{path})
     const results: any[] = [];
     for (const f of files) {
-      const fres = await fetch(`${base}/repos/${encodeURIComponent(repoName)}/files`, {
+      const path = encodeURIComponent(f.path).replace(/%2F/g, "/");
+      const url = `${base}/repos/${owner}/${repoName}/contents/${path}`;
+      // Try to fetch existing sha (for updates)
+      let sha: string | undefined;
+      try {
+        const g = await fetch(url, { headers: authHdr });
+        if (g.ok) { const j = await g.json(); sha = j?.sha; } else { await g.text(); }
+      } catch {}
+      const b64 = btoa(unescape(encodeURIComponent(f.content || "")));
+      const fres = await fetch(url, {
         method: "PUT",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ path: f.path, content: f.content, message: `Add ${f.path} via Stinger AI Dev` }),
+        headers: authHdr,
+        body: JSON.stringify({ message: `Add ${f.path} via Stinger AI Dev`, content: b64, ...(sha ? { sha } : {}) }),
       });
-      results.push({ path: f.path, ok: fres.ok, status: fres.status });
+      const ftxt = await fres.text();
+      results.push({ path: f.path, ok: fres.ok, status: fres.status, error: fres.ok ? undefined : ftxt.slice(0, 200) });
     }
 
     return json({
       success: true,
-      repo: repo?.url || `https://codeverse.stinger.co.zw/${repoName}`,
+      repo: repo?.html_url || repo?.url || `https://codeverse.stinger.co.zw/${owner}/${repoName}`,
       filesPushed: results.filter(r => r.ok).length,
       total: files.length,
       results,
