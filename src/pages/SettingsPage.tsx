@@ -237,6 +237,71 @@ const SettingsPage = () => {
         </a>
       </div>
 
+      {/* Biometric / Passkeys */}
+      <div className="glass rounded-xl p-4 space-y-3 liquid-chrome">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2"><Fingerprint size={14} className="text-primary" />
+            <p className="text-xs font-medium text-foreground">Biometric sign-in (Passkeys)</p></div>
+          <button onClick={enrollPasskey} disabled={enrolling}
+            className="bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-xs font-medium btn-hover disabled:opacity-50">
+            {enrolling ? "Enrolling…" : "+ Add passkey"}
+          </button>
+        </div>
+        {passkeys.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No passkeys yet. Add one to sign in with Face ID, Touch ID or Windows Hello.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {passkeys.map(pk => (
+              <div key={pk.id} className="flex items-center justify-between bg-secondary/50 rounded-lg px-3 py-2">
+                <div className="text-xs">
+                  <p className="text-foreground font-medium">{pk.device_name}</p>
+                  <p className="text-muted-foreground">Added {new Date(pk.created_at).toLocaleDateString()}</p>
+                </div>
+                <button onClick={() => removePasskey(pk.id)} className="p-1.5 rounded text-destructive hover:bg-destructive/10"><Trash2 size={12} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Active sessions */}
+      <div className="glass rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2"><Smartphone size={14} className="text-primary" />
+          <p className="text-xs font-medium text-foreground">Active sessions & devices</p></div>
+        {sessions.length === 0 ? <p className="text-xs text-muted-foreground">No sessions recorded yet.</p> : (
+          <div className="space-y-1.5">
+            {sessions.map(s => (
+              <div key={s.id} className="flex items-center justify-between bg-secondary/50 rounded-lg px-3 py-2">
+                <div className="text-xs space-y-0.5">
+                  <p className="text-foreground font-medium">{s.browser || "?"} on {s.os || "?"} · {s.device || "?"}</p>
+                  <p className="text-muted-foreground flex items-center gap-1"><MapPin size={10} />
+                    {[s.city, s.country].filter(Boolean).join(", ") || s.ip_address || "Unknown location"}
+                  </p>
+                  <p className="text-muted-foreground">Last seen {new Date(s.last_seen_at).toLocaleString()}</p>
+                </div>
+                <button onClick={() => revokeSession(s.id)} className="p-1.5 rounded text-destructive hover:bg-destructive/10"><Trash2 size={12} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recent activity */}
+      <div className="glass rounded-xl p-4 space-y-2">
+        <div className="flex items-center gap-2"><Activity size={14} className="text-primary" />
+          <p className="text-xs font-medium text-foreground">Recent activity</p></div>
+        {activity.length === 0 ? <p className="text-xs text-muted-foreground">No activity yet.</p> : (
+          <div className="max-h-48 overflow-y-auto space-y-1">
+            {activity.map(a => (
+              <div key={a.id} className="flex items-center justify-between text-xs py-1 border-b border-border/30">
+                <span className="text-foreground">{a.action}{a.path ? ` · ${a.path}` : ""}</span>
+                <span className="text-muted-foreground">{new Date(a.created_at).toLocaleTimeString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <button onClick={signOut} className="flex items-center gap-2 text-sm text-destructive hover:underline hover:translate-x-1 transition-transform">
         <LogOut size={14} /> Sign out
       </button>
