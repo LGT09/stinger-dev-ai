@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import { AI_MODELS, DEFAULT_MODEL_ID, getModelById } from "@/lib/aiModels";
+import { streamPuter, streamQvac, isClientProvider } from "@/lib/clientAI";
 
 type AIMode = "chat" | "code" | "image" | "video" | "music";
 
@@ -360,6 +361,30 @@ Generate complete, production-ready files. Include all necessary files for the p
       if (mode === "code") {
         setBuildingProject(true);
         addTerminalLine("system", `🔨 Building: "${input.slice(0, 80)}..."`);
+      }
+
+      // Client-only providers (Puter / Qvac) bypass the edge function entirely
+      if (!isImageGen && isClientProvider(selectedModel.provider)) {
+        const runner = selectedModel.provider === "puter" ? streamPuter : streamQvac;
+        await new Promise<void>((resolve) => {
+          let started = false;
+          const flush = (chunk: string) => {
+            assistantContent += chunk;
+            setMessages(prev => {
+              if (!started) { started = true; return [...prev, { role: "assistant", content: assistantContent }]; }
+              return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantContent } : m));
+            });
+          };
+          runner({
+            messages: requestBody.messages,
+            model: selectedModel.model,
+            onDelta: flush,
+            onDone: () => resolve(),
+            onError: (err) => { flush(`\n\n⚠️ ${err.message}`); resolve(); },
+          });
+        });
+        setIsLoading(false);
+        return;
       }
 
       const resp = await fetch(endpoint, {
