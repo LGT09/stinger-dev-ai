@@ -296,8 +296,55 @@ Generate complete, production-ready files. Include all necessary files for the p
       const isMusicGen = mode === "music";
       const selectedModel = getModelById(selectedModelId);
 
-      // Video / Music: call generate-media (real provider with API key) — non-streaming JSON.
-      if (isVideoGen || isMusicGen) {
+      // Music goes through ai-router (Suno/Mubert via davidcyril). Video stays on generate-media.
+      if (isMusicGen) {
+        const musicModel = selectedModel.provider === "music" ? selectedModel.model : "suno";
+        const resp = await fetch(AI_ROUTER_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
+          body: JSON.stringify({ provider: "music", model: musicModel, messages: [{ role: "user", content: input }] }),
+        });
+        if (!resp.ok || !resp.body) throw new Error("Music generation failed");
+        const reader = resp.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let idx: number;
+          while ((idx = buf.indexOf("\n")) !== -1) {
+            const line = buf.slice(0, idx).trim(); buf = buf.slice(idx + 1);
+            if (!line.startsWith("data: ")) continue;
+            const j = line.slice(6).trim();
+            if (j === "[DONE]") continue;
+            try {
+              const p = JSON.parse(j);
+              const c = p.choices?.[0]?.delta?.content;
+              if (c) {
+                assistantContent += c;
+                setMessages(prev => {
+                  const last = prev[prev.length - 1];
+                  if (last?.role === "assistant" && prev[prev.length - 2]?.role === "user")
+                    return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantContent } : m));
+                  return [...prev, { role: "assistant", content: assistantContent }];
+                });
+              }
+            } catch {}
+          }
+        }
+        if (user && !isAdmin) {
+          const cost = getTokenCost(assistantContent.length);
+          await supabase.from("token_balances").update({ balance: Math.max(0, tokenBalance - cost) }).eq("user_id", user.id);
+          await supabase.from("token_transactions").insert({ user_id: user.id, amount: -cost, action: "music generation", description: input.slice(0, 100) });
+          refreshTokens();
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      // Video: call generate-media (real provider with API key) — non-streaming JSON.
+      if (isVideoGen) {
         const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-media`, {
           method: "POST",
           headers: {
