@@ -1,42 +1,67 @@
-export type AIProvider = "lovable" | "deepseek" | "anthropic" | "puter" | "qvac";
+export type AIProvider = "deepseek" | "anthropic" | "puter" | "qvac" | "davidcyril" | "music";
 
 export interface AIModelOption {
-  id: string;            // unique key used in UI
+  id: string;
   provider: AIProvider;
-  model: string;         // model id sent to upstream
-  label: string;         // display name
-  badge?: string;        // small chip e.g. "Hostify"
+  model: string;
+  label: string;
+  badge?: string;
   description?: string;
-  supportsImage?: boolean;
+  category?: "chat" | "code" | "reasoning" | "vision" | "music" | "ondevice";
 }
 
 export const AI_MODELS: AIModelOption[] = [
-  // Lovable AI Gateway — primary
-  { id: "lovable-gemini-flash",   provider: "lovable", model: "google/gemini-3-flash-preview", label: "Gemini 3 Flash", badge: "Lovable", description: "Lovable AI gateway — fast" },
-  { id: "lovable-gemini-pro",     provider: "lovable", model: "google/gemini-2.5-pro",         label: "Gemini 2.5 Pro", badge: "Lovable", description: "Lovable AI gateway — top quality" },
-  { id: "lovable-gpt5",           provider: "lovable", model: "openai/gpt-5",                  label: "GPT-5",           badge: "Lovable", description: "OpenAI GPT-5 via Lovable" },
-  { id: "lovable-gpt5-mini",      provider: "lovable", model: "openai/gpt-5-mini",             label: "GPT-5 Mini",      badge: "Lovable", description: "Fast & cheap GPT-5" },
+  // Anthropic
+  { id: "claude-3-5-sonnet",  provider: "anthropic", model: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet", badge: "Anthropic", category: "chat", description: "Flagship reasoning + writing" },
+  { id: "claude-3-5-haiku",   provider: "anthropic", model: "claude-3-5-haiku-20241022",  label: "Claude 3.5 Haiku",  badge: "Anthropic", category: "chat", description: "Fastest Claude" },
+  { id: "claude-3-opus",      provider: "anthropic", model: "claude-3-opus-20240229",     label: "Claude 3 Opus",     badge: "Anthropic", category: "reasoning", description: "Deepest reasoning" },
 
-  // Anthropic direct
-  { id: "claude-3-5-sonnet",      provider: "anthropic", model: "claude-3-5-sonnet-20241022",   label: "Claude 3.5 Sonnet", description: "Anthropic flagship" },
-  { id: "claude-3-5-haiku",       provider: "anthropic", model: "claude-3-5-haiku-20241022",    label: "Claude 3.5 Haiku",  description: "Fast Anthropic" },
-  { id: "claude-3-opus",          provider: "anthropic", model: "claude-3-opus-20240229",       label: "Claude 3 Opus",     description: "Deep reasoning" },
+  // DeepSeek
+  { id: "deepseek-chat",      provider: "deepseek",  model: "deepseek-chat",     label: "DeepSeek V3",  badge: "DeepSeek", category: "chat", description: "General chat" },
+  { id: "deepseek-reasoner",  provider: "deepseek",  model: "deepseek-reasoner", label: "DeepSeek R1",  badge: "DeepSeek", category: "reasoning", description: "Step-by-step reasoning" },
 
-  // DeepSeek direct
-  { id: "deepseek-chat",          provider: "deepseek", model: "deepseek-chat",                 label: "DeepSeek V3",    description: "DeepSeek general chat" },
-  { id: "deepseek-reasoner",      provider: "deepseek", model: "deepseek-reasoner",             label: "DeepSeek R1",    description: "Step-by-step reasoning" },
+  // davidcyril.name.ng — free public AI gateway
+  { id: "dc-chatgpt",         provider: "davidcyril", model: "chatgpt",                label: "ChatGPT",       badge: "Free", category: "chat" },
+  { id: "dc-gpt4omini",       provider: "davidcyril", model: "gpt4omini",              label: "GPT-4o Mini",   badge: "Free", category: "chat" },
+  { id: "dc-gpt44",           provider: "davidcyril", model: "gpt44",                  label: "GPT-4.4",       badge: "Free", category: "chat" },
+  { id: "dc-claude",          provider: "davidcyril", model: "claude",                 label: "Claude (free)", badge: "Free", category: "chat" },
+  { id: "dc-claudeSonnet",    provider: "davidcyril", model: "claudeSonnet",           label: "Claude Sonnet (free)", badge: "Free", category: "chat" },
+  { id: "dc-gemini",          provider: "davidcyril", model: "gemini",                 label: "Gemini",        badge: "Free", category: "chat" },
+  { id: "dc-google-gemini",   provider: "davidcyril", model: "google-gemini",          label: "Google Gemini", badge: "Free", category: "chat" },
+  { id: "dc-gemma",           provider: "davidcyril", model: "gemma",                  label: "Gemma",         badge: "Free", category: "chat" },
+  { id: "dc-deepseek-v3",     provider: "davidcyril", model: "deepseek-v3",            label: "DeepSeek V3 (free)", badge: "Free", category: "chat" },
+  { id: "dc-deepseek-r1",     provider: "davidcyril", model: "deepseek-r1",            label: "DeepSeek R1 (free)", badge: "Free", category: "reasoning" },
+  { id: "dc-deepseek-67b",    provider: "davidcyril", model: "deepseek-llm-67b-chat",  label: "DeepSeek 67B",  badge: "Free", category: "chat" },
+  { id: "dc-qwen",            provider: "davidcyril", model: "qwen2Coder",             label: "Qwen 2 Coder",  badge: "Free", category: "code" },
+  { id: "dc-llamacoder",      provider: "davidcyril", model: "llamacoder",             label: "Llama Coder",   badge: "Free", category: "code" },
+  { id: "dc-copilot",         provider: "davidcyril", model: "copilot",                label: "Copilot",       badge: "Free", category: "code" },
+  { id: "dc-perplexity",      provider: "davidcyril", model: "perplexity",             label: "Perplexity",    badge: "Free", category: "chat" },
+  { id: "dc-g4f-groq",        provider: "davidcyril", model: "g4f-groq",               label: "Groq (g4f)",    badge: "Free", category: "chat" },
 
-  // Puter.js — browser-only, no key required (user-pays)
-  { id: "puter-gpt-5",            provider: "puter",    model: "gpt-5",                         label: "Puter · GPT-5",   badge: "Puter", description: "Free via Puter.js (runs in browser)" },
-  { id: "puter-gpt-4o-mini",      provider: "puter",    model: "gpt-4o-mini",                   label: "Puter · GPT-4o mini", badge: "Puter", description: "Free via Puter.js" },
-  { id: "puter-claude",           provider: "puter",    model: "claude-3-5-sonnet",             label: "Puter · Claude 3.5", badge: "Puter", description: "Claude 3.5 via Puter.js" },
+  // Puter — browser, no key
+  { id: "puter-gpt-5",        provider: "puter",     model: "gpt-5",             label: "Puter · GPT-5",       badge: "Puter", category: "chat" },
+  { id: "puter-gpt-4o-mini",  provider: "puter",     model: "gpt-4o-mini",       label: "Puter · GPT-4o mini", badge: "Puter", category: "chat" },
+  { id: "puter-claude",       provider: "puter",     model: "claude-3-5-sonnet", label: "Puter · Claude 3.5",  badge: "Puter", category: "chat" },
 
-  // Qvac — fully on-device LLM in browser
-  { id: "qvac-llama-3-2-1b",      provider: "qvac",     model: "LLAMA_3_2_1B_INST_Q4_0",        label: "Qvac · Llama 3.2 1B", badge: "On-device", description: "Runs locally in your browser — private, no network" },
+  // Qvac — on-device
+  { id: "qvac-llama-3-2-1b",  provider: "qvac",      model: "LLAMA_3_2_1B_INST_Q4_0", label: "Qvac · Llama 3.2 1B", badge: "On-device", category: "ondevice", description: "Runs locally — fully private" },
+
+  // Music (Suno + Mubert) — also exposed as 'models' so picker can route
+  { id: "music-suno",         provider: "music",     model: "suno",   label: "Suno",   badge: "Music", category: "music" },
+  { id: "music-mubert",       provider: "music",     model: "mubert", label: "Mubert", badge: "Music", category: "music" },
 ];
 
-export const DEFAULT_MODEL_ID = "lovable-gemini-flash";
+export const DEFAULT_MODEL_ID = "claude-3-5-sonnet";
+export const DEFAULT_MUSIC_MODEL_ID = "music-suno";
 
 export function getModelById(id: string): AIModelOption {
   return AI_MODELS.find(m => m.id === id) || AI_MODELS[0];
 }
+
+export const MODEL_CATEGORIES = [
+  { id: "chat", label: "Chat" },
+  { id: "code", label: "Code" },
+  { id: "reasoning", label: "Reasoning" },
+  { id: "music", label: "Music" },
+  { id: "ondevice", label: "On-device" },
+] as const;

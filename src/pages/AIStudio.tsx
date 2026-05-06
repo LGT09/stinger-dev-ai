@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import { AI_MODELS, DEFAULT_MODEL_ID, getModelById } from "@/lib/aiModels";
 import { streamPuter, streamQvac, isClientProvider } from "@/lib/clientAI";
+import ModelPickerDialog from "@/components/ModelPickerDialog";
 
 type AIMode = "chat" | "code" | "image" | "video" | "music";
 
@@ -295,8 +296,55 @@ Generate complete, production-ready files. Include all necessary files for the p
       const isMusicGen = mode === "music";
       const selectedModel = getModelById(selectedModelId);
 
-      // Video / Music: call generate-media (real provider with API key) — non-streaming JSON.
-      if (isVideoGen || isMusicGen) {
+      // Music goes through ai-router (Suno/Mubert via davidcyril). Video stays on generate-media.
+      if (isMusicGen) {
+        const musicModel = selectedModel.provider === "music" ? selectedModel.model : "suno";
+        const resp = await fetch(AI_ROUTER_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
+          body: JSON.stringify({ provider: "music", model: musicModel, messages: [{ role: "user", content: input }] }),
+        });
+        if (!resp.ok || !resp.body) throw new Error("Music generation failed");
+        const reader = resp.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let idx: number;
+          while ((idx = buf.indexOf("\n")) !== -1) {
+            const line = buf.slice(0, idx).trim(); buf = buf.slice(idx + 1);
+            if (!line.startsWith("data: ")) continue;
+            const j = line.slice(6).trim();
+            if (j === "[DONE]") continue;
+            try {
+              const p = JSON.parse(j);
+              const c = p.choices?.[0]?.delta?.content;
+              if (c) {
+                assistantContent += c;
+                setMessages(prev => {
+                  const last = prev[prev.length - 1];
+                  if (last?.role === "assistant" && prev[prev.length - 2]?.role === "user")
+                    return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantContent } : m));
+                  return [...prev, { role: "assistant", content: assistantContent }];
+                });
+              }
+            } catch {}
+          }
+        }
+        if (user && !isAdmin) {
+          const cost = getTokenCost(assistantContent.length);
+          await supabase.from("token_balances").update({ balance: Math.max(0, tokenBalance - cost) }).eq("user_id", user.id);
+          await supabase.from("token_transactions").insert({ user_id: user.id, amount: -cost, action: "music generation", description: input.slice(0, 100) });
+          refreshTokens();
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      // Video: call generate-media (real provider with API key) — non-streaming JSON.
+      if (isVideoGen) {
         const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-media`, {
           method: "POST",
           headers: {
@@ -341,6 +389,7 @@ Generate complete, production-ready files. Include all necessary files for the p
       }
 
       // Image mode keeps using the multimodal Lovable AI image model via /chat
+      // Route to AI router (DeepSeek / Anthropic / davidcyril) or to /chat for image-gen.
       let endpoint = AI_ROUTER_URL;
       const requestBody: any = {
         provider: selectedModel.provider,
@@ -352,6 +401,7 @@ Generate complete, production-ready files. Include all necessary files for the p
       };
 
       if (isImageGen) {
+        // Image gen still uses Lovable AI /chat endpoint behind the scenes (kept for image multimodal only)
         endpoint = CHAT_URL;
         requestBody.model = "google/gemini-3.1-flash-image-preview";
         requestBody.modalities = ["image", "text"];
@@ -644,39 +694,16 @@ Generate complete, production-ready files. Include all necessary files for the p
 
   const ModeIcon = modeConfig[mode].icon;
 
-  // Reusable model picker dropdown
+  // Reusable model picker button — opens the visual card-grid dialog
   const ModelPicker = () => {
     const current = getModelById(selectedModelId);
     return (
-      <div className="relative">
-        <button onClick={() => setShowModelPicker(v => !v)}
-          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] bg-secondary/60 hover:bg-secondary text-foreground border border-border/50 max-w-[160px]">
-          <Cpu size={11} className="text-primary flex-shrink-0" />
-          <span className="truncate">{current.label}</span>
-          {current.badge && <span className="text-[9px] px-1 rounded bg-accent/20 text-accent">{current.badge}</span>}
-          <ChevronDown size={10} />
-        </button>
-        <AnimatePresence>
-          {showModelPicker && (
-            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-              className="absolute right-0 top-full mt-1 w-72 max-h-80 overflow-y-auto z-40 glass-strong rounded-xl border border-border/50 shadow-xl p-1">
-              {AI_MODELS.map(m => (
-                <button key={m.id} onClick={() => { setSelectedModelId(m.id); setShowModelPicker(false); toast.success(`Model: ${m.label}`); }}
-                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition-all flex items-start gap-2 ${selectedModelId === m.id ? "bg-primary/15 text-primary" : "hover:bg-secondary/60 text-foreground"}`}>
-                  <Cpu size={10} className="mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-medium truncate">{m.label}</span>
-                      {m.badge && <span className="text-[9px] px-1 rounded bg-accent/20 text-accent flex-shrink-0">{m.badge}</span>}
-                    </div>
-                    {m.description && <p className="text-[10px] text-muted-foreground truncate">{m.description}</p>}
-                  </div>
-                </button>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      <button onClick={() => setShowModelPicker(true)}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] bg-gradient-to-r from-primary/10 to-accent/10 hover:from-primary/20 hover:to-accent/20 text-foreground border border-primary/30 max-w-[180px] btn-hover">
+        <Cpu size={11} className="text-primary flex-shrink-0" />
+        <span className="truncate font-medium">{current.label}</span>
+        {current.badge && <span className="text-[9px] px-1 rounded bg-accent/20 text-accent flex-shrink-0">{current.badge}</span>}
+      </button>
     );
   };
 
@@ -684,6 +711,7 @@ Generate complete, production-ready files. Include all necessary files for the p
   if (mode === "code") {
     return (
       <div className="flex flex-col h-screen relative">
+        <ModelPickerDialog open={showModelPicker} onClose={() => setShowModelPicker(false)} selectedId={selectedModelId} onSelect={setSelectedModelId} />
         {/* Mode selector bar */}
         <div className="border-b border-border/50 p-2 flex items-center gap-1.5 overflow-x-auto glass-ultra">
           <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={startNewChat} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-muted-foreground hover:bg-secondary/80 whitespace-nowrap btn-hover">
@@ -891,6 +919,7 @@ Generate complete, production-ready files. Include all necessary files for the p
   // Chat / Image / Video / Music mode layout
   return (
     <div className="flex flex-col h-screen relative">
+      <ModelPickerDialog open={showModelPicker} onClose={() => setShowModelPicker(false)} selectedId={selectedModelId} onSelect={setSelectedModelId} />
       {/* Mode selector bar */}
       <div className="border-b border-border/50 p-2 flex items-center gap-1.5 overflow-x-auto glass-ultra">
         <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={startNewChat} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-muted-foreground hover:bg-secondary/80 whitespace-nowrap btn-hover">

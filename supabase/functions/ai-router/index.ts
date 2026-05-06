@@ -5,27 +5,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/**
- * Multi-provider AI router. Streams SSE in OpenAI delta format so the existing
- * frontend SSE parser (data: {choices:[{delta:{content}}]} ... [DONE]) keeps working.
- *
- * Body: { provider, model, messages: [{role,content}], stream?: boolean }
- * provider: "lovable" | "deepseek" | "anthropic"
- * (Puter & Qvac run client-side only and never reach this function.)
- */
+/** Multi-provider AI router. Streams SSE in OpenAI delta shape. */
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
   try {
     const { provider, model, messages } = await req.json();
-    if (!Array.isArray(messages) || messages.length === 0) {
-      return jsonErr("messages required", 400);
-    }
+    if (!Array.isArray(messages) || messages.length === 0) return jsonErr("messages required", 400);
 
     switch (provider) {
-      case "lovable":   return await proxyOpenAIShape("https://ai.gateway.lovable.dev/v1/chat/completions", Deno.env.get("LOVABLE_API_KEY"), model || "google/gemini-3-flash-preview", messages);
-      case "deepseek":  return await proxyOpenAIShape("https://api.deepseek.com/v1/chat/completions",        Deno.env.get("DEEPSEEK_API_KEY"),model || "deepseek-chat",                  messages);
+      case "deepseek":  return await proxyOpenAIShape("https://api.deepseek.com/v1/chat/completions", Deno.env.get("DEEPSEEK_API_KEY"), model || "deepseek-chat", messages);
       case "anthropic": return await proxyAnthropic(Deno.env.get("ANTHROPIC_API_KEY"), model || "claude-3-5-sonnet-20241022", messages);
+      case "davidcyril": return await proxyDavidCyril(model, messages);
+      case "music":     return await proxyMusic(model, messages);
       default:          return jsonErr(`Unknown provider: ${provider}`, 400);
     }
   } catch (e: any) {
@@ -38,20 +29,28 @@ function jsonErr(error: string, status: number) {
   return new Response(JSON.stringify({ error }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
-/** Encode a content string as a single OpenAI-style SSE delta line + DONE. */
-function sseFromText(text: string): ReadableStream<Uint8Array> {
+function sseFromText(text: string): Response {
   const enc = new TextEncoder();
-  return new ReadableStream({
-    start(controller) {
-      const chunk = { choices: [{ delta: { content: text } }] };
-      controller.enqueue(enc.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-      controller.enqueue(enc.encode(`data: [DONE]\n\n`));
-      controller.close();
+  const stream = new ReadableStream({
+    start(c) {
+      // Stream in chunks for a typing effect
+      const chunks = text.match(/.{1,40}/gs) || [text];
+      let i = 0;
+      const push = () => {
+        if (i >= chunks.length) {
+          c.enqueue(enc.encode(`data: [DONE]\n\n`));
+          c.close();
+          return;
+        }
+        c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: chunks[i++] } }] })}\n\n`));
+        setTimeout(push, 15);
+      };
+      push();
     },
   });
+  return new Response(stream, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
 }
 
-/** Direct passthrough of an OpenAI-compatible streaming endpoint. */
 async function proxyOpenAIShape(url: string, apiKey: string | undefined, model: string, messages: any[]) {
   if (!apiKey) return jsonErr("API key not configured for this provider", 500);
   const upstream = await fetch(url, {
@@ -61,69 +60,50 @@ async function proxyOpenAIShape(url: string, apiKey: string | undefined, model: 
   });
   if (!upstream.ok) {
     const t = await upstream.text();
-    console.error("upstream error", url, upstream.status, t);
-    const providerName = url.includes("openai.com") ? "OpenAI" : url.includes("deepseek") ? "DeepSeek" : url.includes("lovable") ? "Lovable AI" : "Provider";
-    let msg = `${providerName} error ${upstream.status}`;
-    try { const j = JSON.parse(t); if (j?.error?.message) msg = `${providerName}: ${j.error.message}`; } catch {}
-    if (upstream.status === 429) msg = `${providerName} rate limit hit — try a different model from the picker.`;
-    if (upstream.status === 402) msg = `${providerName} credits exhausted — add funds at the ${providerName} dashboard or pick another model.`;
-    return jsonErr(msg, upstream.status >= 400 && upstream.status < 600 ? upstream.status : 500);
+    let msg = `Upstream ${upstream.status}`;
+    try { const j = JSON.parse(t); if (j?.error?.message) msg = j.error.message; } catch {}
+    if (upstream.status === 429) msg = `Rate limit — switch model.`;
+    if (upstream.status === 402) msg = `Credits exhausted on this provider.`;
+    return jsonErr(msg, upstream.status);
   }
   return new Response(upstream.body, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
 }
 
-/** Anthropic uses a different SSE shape — convert their events to OpenAI deltas. */
 async function proxyAnthropic(apiKey: string | undefined, model: string, messages: any[]) {
   if (!apiKey) return jsonErr("ANTHROPIC_API_KEY not configured", 500);
-  // Split system out
   const system = messages.filter(m => m.role === "system").map(m => m.content).join("\n\n");
   const userAssistant = messages.filter(m => m.role !== "system");
   const upstream = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
+    headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
     body: JSON.stringify({ model, max_tokens: 4096, system, messages: userAssistant, stream: true }),
   });
   if (!upstream.ok || !upstream.body) {
     const t = await upstream.text().catch(() => "");
-    console.error("anthropic error", upstream.status, t);
-    let msg = `Anthropic error ${upstream.status}`;
-    try { const j = JSON.parse(t); if (j?.error?.message) msg = `Anthropic: ${j.error.message}`; } catch {}
+    let msg = `Anthropic ${upstream.status}`;
+    try { const j = JSON.parse(t); if (j?.error?.message) msg = j.error.message; } catch {}
     return jsonErr(msg, 500);
   }
-
-  const enc = new TextEncoder();
-  const dec = new TextDecoder();
+  const enc = new TextEncoder(), dec = new TextDecoder();
   const reader = upstream.body.getReader();
-
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {
       let buf = "";
       while (true) {
         const { done, value } = await reader.read();
-        if (done) {
-          controller.enqueue(enc.encode(`data: [DONE]\n\n`));
-          controller.close();
-          return;
-        }
+        if (done) { controller.enqueue(enc.encode(`data: [DONE]\n\n`)); controller.close(); return; }
         buf += dec.decode(value, { stream: true });
         let idx: number;
         while ((idx = buf.indexOf("\n")) !== -1) {
           const line = buf.slice(0, idx).trim();
           buf = buf.slice(idx + 1);
           if (!line.startsWith("data: ")) continue;
-          const json = line.slice(6).trim();
-          if (!json) continue;
           try {
-            const evt = JSON.parse(json);
+            const evt = JSON.parse(line.slice(6).trim());
             if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
-              const out = { choices: [{ delta: { content: evt.delta.text } }] };
-              controller.enqueue(enc.encode(`data: ${JSON.stringify(out)}\n\n`));
+              controller.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: evt.delta.text } }] })}\n\n`));
             }
-          } catch { /* ignore */ }
+          } catch {}
         }
       }
     },
@@ -131,101 +111,55 @@ async function proxyAnthropic(apiKey: string | undefined, model: string, message
   return new Response(stream, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
 }
 
-/** Hostify endpoints: not OpenAI-compatible. We call the simple JSON ones and stream the answer. */
-async function proxyHostify(model: string, messages: any[]) {
-  // Use the last user message as the prompt
-  const lastUser = [...messages].reverse().find(m => m.role === "user")?.content || "";
+/** davidcyril.name.ng AI endpoints — simple GET ?text= or ?prompt=, returns {success,response} */
+const DC_PARAM: Record<string, "text" | "prompt"> = {
+  "claude": "text", "claudeSonnet": "text", "chatgpt": "prompt", "gpt44": "text",
+  "gpt4omini": "text", "google-gemini": "prompt", "gemini": "text", "gemma": "text",
+  "deepseek-v3": "text", "deepseek-r1": "text", "deepseek-llm-67b-chat": "text",
+  "qwen2Coder": "prompt", "llamacoder": "prompt", "copilot": "text", "perplexity": "text", "g4f-groq": "text",
+};
 
-  let url = "";
-  let body: any;
-  let extract: (data: any) => string;
-
-  if (model === "letmegpt") {
-    url = "https://api.hostify.indevs.in/api/ai/letmegpt";
-    body = { message: lastUser };
-    extract = (d) => normalizeHostify(d);
-  } else if (model === "grok") {
-    url = "https://api.hostify.indevs.in/api/ai/grok";
-    body = { message: lastUser };
-    extract = (d) => normalizeHostify(d);
-  } else if (model === "gemini") {
-    url = "https://api.hostify.indevs.in/api/ai/gemini";
-    body = { prompt: lastUser };
-    extract = (d) => normalizeHostify(d);
-  } else if (model === "gemini-v2") {
-    url = "https://api.hostify.indevs.in/api/ai/gemini-v2";
-    body = { prompt: lastUser };
-    extract = (d) => normalizeHostify(d);
-  } else if (model === "notegpt-deepseek") {
-    // notegpt is a streaming SSE endpoint — passthrough but reformat each line
-    const upstream = await fetch("https://api.hostify.indevs.in/api/ai/notegpt", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: lastUser, model: "TA/deepseek-ai/DeepSeek-R1", chat_mode: "deep_think" }),
-    });
-    if (!upstream.ok || !upstream.body) return jsonErr(`Hostify error ${upstream.status}`, 500);
-    const enc = new TextEncoder();
-    const dec = new TextDecoder();
-    const reader = upstream.body.getReader();
-    const stream = new ReadableStream<Uint8Array>({
-      async pull(controller) {
-        let buf = "";
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) { controller.enqueue(enc.encode(`data: [DONE]\n\n`)); controller.close(); return; }
-          buf += dec.decode(value, { stream: true });
-          let idx: number;
-          while ((idx = buf.indexOf("\n")) !== -1) {
-            const raw = buf.slice(0, idx).trim();
-            buf = buf.slice(idx + 1);
-            if (!raw.startsWith("data:")) continue;
-            const j = raw.slice(5).trim();
-            try {
-              const obj = JSON.parse(j);
-              const text = obj?.text || obj?.reasoning || "";
-              if (text) {
-                const out = { choices: [{ delta: { content: text } }] };
-                controller.enqueue(enc.encode(`data: ${JSON.stringify(out)}\n\n`));
-              }
-            } catch { /* ignore */ }
-          }
-        }
-      },
-    });
-    return new Response(stream, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
-  } else {
-    return jsonErr(`Unknown Hostify model: ${model}`, 400);
+async function proxyDavidCyril(model: string, messages: any[]) {
+  const last = [...messages].reverse().find(m => m.role === "user")?.content || "";
+  const sys = messages.filter(m => m.role === "system").map(m => m.content).join("\n");
+  const fullPrompt = sys ? `${sys}\n\nUser: ${last}` : last;
+  const param = DC_PARAM[model] || "text";
+  const url = `https://apis.davidcyril.name.ng/ai/${model}?${param}=${encodeURIComponent(fullPrompt)}`;
+  try {
+    const res = await fetch(url, { method: "GET" });
+    const txt = await res.text();
+    let data: any = {};
+    try { data = JSON.parse(txt); } catch {}
+    if (!res.ok || data?.success === false) {
+      return sseFromText(`⚠️ ${model} unavailable right now (${data?.message || res.status}). Try a different model.`);
+    }
+    const out = data?.response || data?.result || data?.answer || data?.message || txt;
+    return sseFromText(typeof out === "string" ? out : JSON.stringify(out));
+  } catch (e: any) {
+    return sseFromText(`⚠️ Network error contacting ${model}: ${e.message}`);
   }
-
-  const upstream = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const raw = await upstream.text();
-  let data: any = {};
-  try { data = JSON.parse(raw); } catch { /* keep raw */ }
-  if (!upstream.ok) {
-    console.error("hostify http error", upstream.status, raw.slice(0, 300));
-    const text = `⚠️ Hostify upstream returned ${upstream.status}. The Hostify provider is having issues right now. Try another model.`;
-    return new Response(sseFromText(text), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
-  }
-  if (data && data.success === false) {
-    const text = `⚠️ Hostify model didn't return an answer (${data.message || "unknown error"}). Try another Hostify model like Grok or Gemini.`;
-    return new Response(sseFromText(text), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
-  }
-  const text = extract(data) || "(empty response)";
-  return new Response(sseFromText(text), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
 }
 
-function normalizeHostify(d: any): string {
-  if (!d) return "";
-  // Common shapes seen across endpoints
-  if (typeof d.result === "string") return d.result;
-  if (d.result?.answer) return d.result.answer;
-  if (d.answer) return d.answer;
-  if (d.text) return d.text;
-  if (d.response) return d.response;
-  if (d.message) return d.message;
-  return JSON.stringify(d);
+/** Music generation: model = "suno" | "mubert" — returns a text confirmation with audio URL */
+async function proxyMusic(model: string, messages: any[]) {
+  const prompt = [...messages].reverse().find(m => m.role === "user")?.content || "";
+  if (model === "mubert") {
+    try {
+      const r = await fetch(`https://apis.davidcyril.name.ng/aimusic/mubert/create?prompt=${encodeURIComponent(prompt)}`);
+      const j = await r.json().catch(() => ({}));
+      const url = j?.response?.url || j?.url || j?.audio || j?.result;
+      if (!url) return sseFromText(`⏳ Mubert queued: ${j?.message || "no URL yet"}. Try again in a moment.`);
+      return sseFromText(`✅ **Mubert track ready!**\n\n<audio src="${url}" controls style="width:100%"></audio>\n\n[Download](${url})`);
+    } catch (e: any) { return sseFromText(`⚠️ Mubert error: ${e.message}`); }
+  }
+  if (model === "suno") {
+    try {
+      const r = await fetch(`https://apis.davidcyril.name.ng/aimusic/suno/create?prompt=${encodeURIComponent(prompt)}`);
+      const j = await r.json().catch(() => ({}));
+      const url = j?.response?.audio_url || j?.audio_url || j?.url;
+      if (!url) return sseFromText(`⏳ Suno queued: ${j?.message || "no URL yet"}. Check back shortly.`);
+      return sseFromText(`✅ **Suno song ready!**\n\n<audio src="${url}" controls style="width:100%"></audio>\n\n[Download](${url})`);
+    } catch (e: any) { return sseFromText(`⚠️ Suno error: ${e.message}`); }
+  }
+  return jsonErr(`Unknown music model: ${model}`, 400);
 }
