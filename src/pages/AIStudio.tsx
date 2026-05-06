@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import { AI_MODELS, DEFAULT_MODEL_ID, getModelById } from "@/lib/aiModels";
 import { streamPuter, streamQvac, isClientProvider } from "@/lib/clientAI";
+import ModelPickerDialog from "@/components/ModelPickerDialog";
 
 type AIMode = "chat" | "code" | "image" | "video" | "music";
 
@@ -341,6 +342,7 @@ Generate complete, production-ready files. Include all necessary files for the p
       }
 
       // Image mode keeps using the multimodal Lovable AI image model via /chat
+      // Route to AI router (DeepSeek / Anthropic / davidcyril) or to /chat for image-gen.
       let endpoint = AI_ROUTER_URL;
       const requestBody: any = {
         provider: selectedModel.provider,
@@ -352,6 +354,7 @@ Generate complete, production-ready files. Include all necessary files for the p
       };
 
       if (isImageGen) {
+        // Image gen still uses Lovable AI /chat endpoint behind the scenes (kept for image multimodal only)
         endpoint = CHAT_URL;
         requestBody.model = "google/gemini-3.1-flash-image-preview";
         requestBody.modalities = ["image", "text"];
