@@ -711,6 +711,7 @@ Generate complete, production-ready files. Include all necessary files for the p
   if (mode === "code") {
     return (
       <div className="flex flex-col h-screen relative">
+        <ModelPickerDialog open={showModelPicker} onClose={() => setShowModelPicker(false)} selectedId={selectedModelId} onSelect={setSelectedModelId} />
         {/* Mode selector bar */}
         <div className="border-b border-border/50 p-2 flex items-center gap-1.5 overflow-x-auto glass-ultra">
           <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={startNewChat} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-muted-foreground hover:bg-secondary/80 whitespace-nowrap btn-hover">
