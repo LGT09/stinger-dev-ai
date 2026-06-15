@@ -394,6 +394,7 @@ Generate complete, production-ready files. Include all necessary files for the p
       const requestBody: any = {
         provider: selectedModel.provider,
         model: selectedModel.model,
+        mode,
         messages: [
           { role: "system", content: getSystemPrompt() },
           ...newMessages.filter(m => !m.images).map(m => ({ role: m.role, content: m.content })),
