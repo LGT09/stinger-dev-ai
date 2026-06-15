@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Shield, Users, Zap, DollarSign, Search, Plus, Minus, Ban, AlertTriangle, Check, X, RefreshCw } from "lucide-react";
+import { Shield, Users, Zap, DollarSign, Search, Plus, Minus, Ban, AlertTriangle, Check, X, RefreshCw, Globe, Monitor, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -15,6 +15,11 @@ interface UserRow {
   ban_reason: string | null;
   plan: "free" | "pro";
   balance?: number;
+  last_seen_at?: string | null;
+  last_ip?: string | null;
+  last_device?: string | null;
+  last_location?: string | null;
+  last_browser?: string | null;
 }
 
 const AdminDashboard = () => {
@@ -38,10 +43,24 @@ const AdminDashboard = () => {
     const { data: profiles } = await supabase.from("profiles").select("*");
     if (!profiles) { setLoading(false); return; }
     const { data: balances } = await supabase.from("token_balances").select("*");
-    const merged = profiles.map((p: any) => ({
-      ...p,
-      balance: balances?.find((b: any) => b.user_id === p.user_id)?.balance ?? 0,
-    }));
+    const { data: sessions } = await supabase
+      .from("user_sessions")
+      .select("user_id, ip_address, last_seen_at, device, browser, city, country")
+      .order("last_seen_at", { ascending: false });
+    const latestByUser: Record<string, any> = {};
+    (sessions || []).forEach((s: any) => { if (!latestByUser[s.user_id]) latestByUser[s.user_id] = s; });
+    const merged = profiles.map((p: any) => {
+      const s = latestByUser[p.user_id];
+      return {
+        ...p,
+        balance: balances?.find((b: any) => b.user_id === p.user_id)?.balance ?? 0,
+        last_seen_at: s?.last_seen_at ?? null,
+        last_ip: s?.ip_address ?? null,
+        last_device: s?.device ?? null,
+        last_browser: s?.browser ?? null,
+        last_location: s ? [s.city, s.country].filter(Boolean).join(", ") : null,
+      };
+    });
     setUsers(merged);
     setLoading(false);
   };
@@ -212,6 +231,12 @@ const AdminDashboard = () => {
                   </div>
                   <span className="text-muted-foreground">{u.email}</span>
                   {u.ban_reason && <p className="text-destructive/80 italic mt-0.5">Reason: {u.ban_reason}</p>}
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[10px] text-muted-foreground">
+                    {u.last_seen_at && <span className="flex items-center gap-1"><Clock size={9} /> {new Date(u.last_seen_at).toLocaleString()}</span>}
+                    {u.last_ip && <span className="flex items-center gap-1"><Globe size={9} /> {u.last_ip}</span>}
+                    {u.last_location && <span>{u.last_location}</span>}
+                    {(u.last_device || u.last_browser) && <span className="flex items-center gap-1"><Monitor size={9} /> {[u.last_device, u.last_browser].filter(Boolean).join(" · ")}</span>}
+                  </div>
                 </div>
                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${u.plan === "pro" ? "bg-primary/20 text-primary" : "bg-secondary text-muted-foreground"}`}>{u.plan}</span>
                 <span className="text-muted-foreground"><Zap size={10} className="inline" /> {u.balance ?? 0}</span>
