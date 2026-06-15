@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, Bot, FolderKanban, Globe, CreditCard,
   Settings, ChevronLeft, ChevronRight, Zap, Shield, Book,
-  Mail, Lock, Key, Users, GitBranch
+  Mail, Lock, Key, Users, GitBranch, Wallet
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import logo from "@/assets/logo.png";
@@ -22,6 +22,7 @@ const AppSidebar = () => {
     { icon: Globe, label: "Community", path: "/community" },
     { icon: GitBranch, label: "CodeVerse", path: "/integrations/codeverse" },
     { icon: CreditCard, label: "Tokens", path: "/tokens" },
+    { icon: Wallet, label: "Wallet", path: "/wallet" },
     { icon: Key, label: "Secrets", path: "/secrets" },
     { icon: Users, label: "Workspace", path: "/workspace" },
     { icon: Book, label: "Docs", path: "/docs" },
@@ -79,15 +80,17 @@ const AppSidebar = () => {
 
       <div className="p-2 border-t border-border/50">
         {!collapsed && (
-          <motion.div
-            className="px-3 py-2 mb-2 rounded-lg bg-primary/5 border border-primary/20 shimmer"
+          <motion.button
+            onClick={() => navigate("/wallet")}
+            className="w-full px-3 py-2 mb-2 rounded-lg bg-primary/5 border border-primary/20 shimmer text-left"
             whileHover={{ scale: 1.02 }}
           >
             <div className="flex items-center gap-1.5 text-xs text-primary relative z-10">
               <Zap size={12} className="pulse-glow" />
               <span className="font-medium">{tokenBalance.toLocaleString()} tokens</span>
+              {tokenBalance === 0 && <span className="ml-auto text-[9px] text-destructive">Top up</span>}
             </div>
-          </motion.div>
+          </motion.button>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}

@@ -1,11 +1,15 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, FolderTree, FileCode, Save, Download, Eye, Code, FolderOpen, Folder, File as FileIcon, Globe, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, FolderTree, FileCode, Save, Download, Eye, Code, FolderOpen, Folder, File as FileIcon, Globe, Plus, Trash2, Smartphone, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { parseProjectFiles, serializeProjectFiles, buildTree, downloadProjectAsZip, isWebProject, buildPreviewHTML, type ParsedFile, type TreeNode } from "@/lib/projectFiles";
+
+const CURSOR_COLORS = ["#f59e0b", "#ec4899", "#8b5cf6", "#3b82f6", "#10b981", "#ef4444"];
+function hashStr(s: string) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
+const colorFor = (id: string) => CURSOR_COLORS[Math.abs(hashStr(id)) % CURSOR_COLORS.length];
 
 const TreeRow = ({ node, depth, activePath, onSelect }: { node: TreeNode; depth: number; activePath: string; onSelect: (f: ParsedFile) => void }) => {
   const [open, setOpen] = useState(true);
@@ -35,7 +39,7 @@ const TreeRow = ({ node, depth, activePath, onSelect }: { node: TreeNode; depth:
 const ProjectViewer = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [project, setProject] = useState<any>(null);
   const [files, setFiles] = useState<ParsedFile[]>([]);
   const [activeFile, setActiveFile] = useState<ParsedFile | null>(null);
@@ -43,6 +47,9 @@ const ProjectViewer = () => {
   const [tab, setTab] = useState<"code" | "preview">("code");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [participants, setParticipants] = useState<Record<string, { name: string; color: string; file?: string }>>({});
+  const [apkStatus, setApkStatus] = useState<{ status: string; apk_url?: string } | null>(null);
+  const channelRef = useRef<any>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -59,6 +66,57 @@ const ProjectViewer = () => {
       setLoading(false);
     })();
   }, [id, navigate]);
+
+  useEffect(() => {
+    if (!id || !user) return;
+    const channel = supabase.channel(`project:${id}`, { config: { presence: { key: user.id } } });
+    channelRef.current = channel;
+    const me = { name: profile?.display_name || user.email || "Anon", color: colorFor(user.id) };
+    channel
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "projects", filter: `id=eq.${id}` }, (payload: any) => {
+        const next = payload.new;
+        if (!next || next.user_id === user.id) return;
+        setProject(next);
+        const parsed = parseProjectFiles(next.code_content, `${next.name || "project"}.txt`);
+        setFiles(parsed);
+        toast.info("Project updated by collaborator");
+      })
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState() as Record<string, any[]>;
+        const map: typeof participants = {};
+        Object.entries(state).forEach(([uid, metas]) => {
+          if (uid === user.id) return;
+          const m: any = metas[metas.length - 1];
+          map[uid] = { name: m.name, color: m.color, file: m.file };
+        });
+        setParticipants(map);
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") await channel.track({ ...me, file: activeFile?.path });
+      });
+    return () => { supabase.removeChannel(channel); channelRef.current = null; };
+    // eslint-disable-next-line
+  }, [id, user?.id]);
+
+  useEffect(() => {
+    if (!channelRef.current || !user) return;
+    channelRef.current.track({
+      name: profile?.display_name || user.email || "Anon",
+      color: colorFor(user.id),
+      file: activeFile?.path,
+    });
+  }, [activeFile?.path, user?.id, profile?.display_name]);
+
+  useEffect(() => {
+    if (!apkStatus || apkStatus.status !== "pending" || !id || !user) return;
+    const i = setInterval(async () => {
+      const { data } = await supabase.from("apk_builds")
+        .select("status, apk_url").eq("project_id", id).eq("user_id", user.id)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (data) setApkStatus({ status: data.status, apk_url: data.apk_url || undefined });
+    }, 5000);
+    return () => clearInterval(i);
+  }, [apkStatus?.status, id, user?.id]);
 
   const tree = useMemo(() => buildTree(files), [files]);
   const isWeb = useMemo(() => isWebProject(files), [files]);
@@ -83,6 +141,14 @@ const ProjectViewer = () => {
     if (error) toast.error("Save failed");
     else { setFiles(updated); toast.success("Project saved"); }
     setSaving(false);
+  };
+
+  const requestApk = async () => {
+    if (!user || !id) return;
+    const { data, error } = await supabase.functions.invoke("project-export", { body: { projectId: id, format: "apk" } });
+    if (error) { toast.error(error.message); return; }
+    setApkStatus({ status: data.status });
+    toast.success(data.message || "APK build queued");
   };
 
   const addFile = () => {
@@ -126,6 +192,20 @@ const ProjectViewer = () => {
           {project.is_published && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/20 text-primary">Published</span>}
         </div>
         <div className="ml-auto flex items-center gap-1.5">
+          {Object.keys(participants).length > 0 && (
+            <div className="flex items-center -space-x-1.5 mr-1" title="Live collaborators">
+              {Object.entries(participants).slice(0, 4).map(([uid, p]) => (
+                <div key={uid} title={`${p.name}${p.file ? ` · ${p.file}` : ""}`}
+                  className="w-6 h-6 rounded-full border-2 border-background flex items-center justify-center text-[10px] font-semibold text-white"
+                  style={{ background: p.color }}>
+                  {(p.name || "?").charAt(0).toUpperCase()}
+                </div>
+              ))}
+              {Object.keys(participants).length > 4 && (
+                <div className="w-6 h-6 rounded-full border-2 border-background bg-secondary text-[9px] flex items-center justify-center">+{Object.keys(participants).length - 4}</div>
+              )}
+            </div>
+          )}
           <div className="flex items-center bg-secondary/60 rounded-lg p-0.5">
             <button onClick={() => setTab("code")}
               className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all ${tab === "code" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
@@ -146,6 +226,19 @@ const ProjectViewer = () => {
             className="flex items-center gap-1 bg-secondary text-foreground px-2.5 py-1 rounded-lg text-[11px] font-medium btn-hover">
             <Download size={11} /> ZIP
           </motion.button>
+          {isOwner && (
+            apkStatus?.apk_url ? (
+              <a href={apkStatus.apk_url} target="_blank" rel="noreferrer"
+                className="flex items-center gap-1 bg-green-500/20 text-green-400 px-2.5 py-1 rounded-lg text-[11px] font-medium">
+                <Smartphone size={11} /> Download APK
+              </a>
+            ) : (
+              <button onClick={requestApk} disabled={apkStatus?.status === "pending"}
+                className="flex items-center gap-1 bg-accent/20 text-accent px-2.5 py-1 rounded-lg text-[11px] font-medium disabled:opacity-60">
+                <Smartphone size={11} /> {apkStatus?.status === "pending" ? "Building…" : "Build APK"}
+              </button>
+            )
+          )}
         </div>
       </div>
 

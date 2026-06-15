@@ -14,10 +14,114 @@ export type Database = {
   }
   public: {
     Tables: {
+      apk_builds: {
+        Row: {
+          apk_url: string | null
+          created_at: string
+          error: string | null
+          id: string
+          project_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          apk_url?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          project_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          apk_url?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          project_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "apk_builds_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          role: string
+          thread_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          role: string
+          thread_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          role?: string
+          thread_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_threads: {
+        Row: {
+          created_at: string
+          id: string
+          mode: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mode?: string
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mode?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           ban_reason: string | null
+          codeverse_username: string | null
           created_at: string
           display_name: string | null
           email: string | null
@@ -34,6 +138,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           ban_reason?: string | null
+          codeverse_username?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null
@@ -50,6 +155,7 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           ban_reason?: string | null
+          codeverse_username?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null

@@ -4,8 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { toast } from "sonner";
 import logo from "@/assets/logo.png";
-import { loginWithPasskey, supportsBiometric } from "@/lib/biometric";
-import { Fingerprint } from "lucide-react";
+import { loginWithPasskey, signupWithPasskey, supportsBiometric, requestDevicePermissions } from "@/lib/biometric";
+import { Fingerprint, Scan } from "lucide-react";
 
 const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -34,7 +34,20 @@ const AuthPage = () => {
     setLoading(true);
     try {
       await loginWithPasskey(email);
+      toast.success("Signed in!");
     } catch (e: any) { toast.error(e.message || "Biometric sign-in failed"); }
+    finally { setLoading(false); }
+  };
+
+  const handleBiometricSignup = async () => {
+    if (!email) { toast.error("Enter your email first"); return; }
+    if (!supportsBiometric()) { toast.error("This browser doesn't support biometrics — try Chrome on Android, Safari on iOS, or your laptop's built-in browser."); return; }
+    setLoading(true);
+    try {
+      await requestDevicePermissions();
+      await signupWithPasskey(email, displayName || email.split("@")[0]);
+      toast.success("Account created — welcome!");
+    } catch (e: any) { toast.error(e.message || "Biometric sign-up failed"); }
     finally { setLoading(false); }
   };
 
@@ -110,11 +123,17 @@ const AuthPage = () => {
                 Continue with Google
               </button>
 
-              {isLogin && (
-                <button onClick={handleBiometric} disabled={loading} className="w-full flex items-center justify-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg py-2.5 text-sm font-medium transition-colors mb-4 border border-primary/30">
-                  <Fingerprint className="w-4 h-4" /> Sign in with biometrics
-                </button>
-              )}
+              <button
+                onClick={isLogin ? handleBiometric : handleBiometricSignup}
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg py-2.5 text-sm font-medium transition-colors mb-2 border border-primary/30"
+              >
+                {isLogin ? <Fingerprint className="w-4 h-4" /> : <Scan className="w-4 h-4" />}
+                {isLogin ? "Sign in with Face ID / Touch ID / PIN" : "Sign up with device (Face / fingerprint / PIN)"}
+              </button>
+              <p className="text-[10px] text-muted-foreground mb-4 text-center">
+                Uses your phone's built-in security — nothing biometric leaves your device.
+              </p>
 
               <div className="flex items-center gap-3 mb-4">
                 <div className="flex-1 h-px bg-border"></div>

@@ -16,6 +16,7 @@ import Community from "@/pages/Community";
 import Tokens from "@/pages/Tokens";
 import SettingsPage from "@/pages/SettingsPage";
 import AdminDashboard from "@/pages/AdminDashboard";
+import Wallet from "@/pages/Wallet";
 import ResetPassword from "@/pages/ResetPassword";
 import SharedChat from "@/pages/SharedChat";
 import Documentation from "@/pages/Documentation";
@@ -114,6 +115,7 @@ const AppContent = () => {
           <Route path="/integrations/supabase" element={<SupabaseIntegration />} />
           <Route path="/integrations/codeverse" element={<CodeVerseIntegration />} />
           <Route path="/tokens" element={<Tokens />} />
+          <Route path="/wallet" element={<Wallet />} />
           <Route path="/secrets" element={<SecretsManager />} />
           <Route path="/workspace" element={<Workspace />} />
           <Route path="/settings" element={<SettingsPage />} />

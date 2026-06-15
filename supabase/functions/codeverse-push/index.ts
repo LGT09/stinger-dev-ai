@@ -48,19 +48,26 @@ serve(async (req) => {
     }
 
     // 2. Resolve owner username — needed for file upload path.
-    //    repo-api derives username from profiles.username via the auth context.
-    //    The create response includes user_id but not username; we ask /repos to learn ours.
-    let username: string | undefined = repo?.repo?.owner_username || repo?.repo?.username;
+    let username: string | undefined =
+      repo?.repo?.owner_username || repo?.repo?.username || repo?.owner?.username;
+    if (!username) {
+      // Try the /user whoami endpoint exposed by repo-api.
+      const whoRes = await fetch(`${CV_BASE}/user`, { headers: authHdr });
+      if (whoRes.ok) {
+        const wj = await whoRes.json().catch(() => ({}));
+        username = wj?.username || wj?.user?.username || wj?.profile?.username;
+      }
+    }
     if (!username) {
       const reposRes = await fetch(`${CV_BASE}/repos`, { headers: authHdr });
       if (reposRes.ok) {
         const rj = await reposRes.json().catch(() => ({}));
-        // The list returns repos but not username; fall back to whoami via first repo or owner_username.
-        username = rj?.repos?.[0]?.owner_username;
+        username = rj?.repos?.[0]?.owner_username || rj?.repos?.[0]?.username;
       }
     }
-    // Final fallback: try a known username header endpoint (not part of repo-api spec, but harmless).
-    if (!username) username = repo?.repo?.user_id ? String(repo.repo.user_id).slice(0, 8) : "me";
+    if (!username) {
+      return json({ error: "CodeVerse cannot find your username. Open Integrations → CodeVerse and set your CodeVerse username before pushing." }, 200);
+    }
 
     // 3. Bulk upload files: POST /repos/{username}/{repo}/files  body: { files: [{path,content}], commit_message }
     const uploadRes = await fetch(`${CV_BASE}/repos/${encodeURIComponent(username)}/${encodeURIComponent(repoName)}/files`, {

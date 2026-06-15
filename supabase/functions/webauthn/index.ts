@@ -132,14 +132,85 @@ serve(async (req) => {
       }).eq("id", pk.id);
       await admin.from("webauthn_challenges").delete().eq("id", ch.id);
 
-      // Issue a magic-link sign-in token via admin generateLink
+      // Issue a magic-link token; return token_hash so the client can call
+      // supabase.auth.verifyOtp({ type:'magiclink', token_hash }) and set a
+      // session in-place — no redirect needed.
       const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
         type: "magiclink",
         email,
       });
       if (linkErr) return json({ error: linkErr.message }, 500);
-      // Return the action_link (frontend redirects to it to complete sign-in)
-      return json({ success: true, action_link: (linkData as any)?.properties?.action_link });
+      const props: any = (linkData as any)?.properties || {};
+      return json({
+        success: true,
+        token_hash: props.hashed_token,
+        email_otp: props.email_otp,
+        action_link: props.action_link, // legacy fallback
+      });
+    }
+
+    /* ---------- PASSKEY SIGNUP — creates user, enrolls passkey, returns session token ---------- */
+    if (action === "signup-options") {
+      const email = (body.email || "").toLowerCase();
+      const displayName = body.displayName || email.split("@")[0];
+      if (!email) return json({ error: "email required" }, 400);
+      // Create user if it doesn't exist (email-confirmed).
+      let userId: string | null = null;
+      const { data: existing } = await admin.from("profiles").select("user_id").eq("email", email).maybeSingle();
+      if (existing) userId = existing.user_id;
+      if (!userId) {
+        const { data: created, error: createErr } = await admin.auth.admin.createUser({
+          email,
+          email_confirm: true,
+          user_metadata: { display_name: displayName },
+        });
+        if (createErr) return json({ error: createErr.message }, 400);
+        userId = created.user!.id;
+      }
+      const { data: prior } = await admin.from("user_passkeys").select("credential_id, transports").eq("user_id", userId);
+      const opts = await generateRegistrationOptions({
+        rpName, rpID,
+        userID: new TextEncoder().encode(userId),
+        userName: email,
+        attestationType: "none",
+        excludeCredentials: (prior || []).map((c: any) => ({ id: c.credential_id, transports: c.transports || [] })),
+        authenticatorSelection: { residentKey: "preferred", userVerification: "preferred" },
+      });
+      await admin.from("webauthn_challenges").insert({ identifier: userId, challenge: opts.challenge, type: "register" });
+      return json({ ...opts, _userId: userId });
+    }
+
+    if (action === "signup-verify") {
+      const userId = body.userId;
+      const email = (body.email || "").toLowerCase();
+      if (!userId || !email) return json({ error: "userId and email required" }, 400);
+      const { data: ch } = await admin.from("webauthn_challenges")
+        .select("*").eq("identifier", userId).eq("type", "register")
+        .order("created_at", { ascending: false }).limit(1).single();
+      if (!ch) return json({ error: "Challenge not found" }, 400);
+
+      const verification = await verifyRegistrationResponse({
+        response: body.response,
+        expectedChallenge: ch.challenge,
+        expectedOrigin: origin,
+        expectedRPID: rpID,
+      });
+      if (!verification.verified || !verification.registrationInfo) return json({ error: "Verification failed" }, 400);
+      const { credential } = verification.registrationInfo as any;
+      const credId = credential.id;
+      const pubKey = btoa(String.fromCharCode(...credential.publicKey));
+      await admin.from("user_passkeys").insert({
+        user_id: userId, credential_id: credId, public_key: pubKey,
+        counter: credential.counter ?? 0,
+        transports: body.response?.response?.transports || [],
+        device_name: body.deviceName || "This device",
+      });
+      await admin.from("webauthn_challenges").delete().eq("id", ch.id);
+
+      const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({ type: "magiclink", email });
+      if (linkErr) return json({ error: linkErr.message }, 500);
+      const props: any = (linkData as any)?.properties || {};
+      return json({ success: true, token_hash: props.hashed_token, email_otp: props.email_otp });
     }
 
     return json({ error: "Unknown action" }, 404);
