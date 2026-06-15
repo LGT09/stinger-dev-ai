@@ -192,6 +192,20 @@ const ProjectViewer = () => {
           {project.is_published && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/20 text-primary">Published</span>}
         </div>
         <div className="ml-auto flex items-center gap-1.5">
+          {Object.keys(participants).length > 0 && (
+            <div className="flex items-center -space-x-1.5 mr-1" title="Live collaborators">
+              {Object.entries(participants).slice(0, 4).map(([uid, p]) => (
+                <div key={uid} title={`${p.name}${p.file ? ` · ${p.file}` : ""}`}
+                  className="w-6 h-6 rounded-full border-2 border-background flex items-center justify-center text-[10px] font-semibold text-white"
+                  style={{ background: p.color }}>
+                  {(p.name || "?").charAt(0).toUpperCase()}
+                </div>
+              ))}
+              {Object.keys(participants).length > 4 && (
+                <div className="w-6 h-6 rounded-full border-2 border-background bg-secondary text-[9px] flex items-center justify-center">+{Object.keys(participants).length - 4}</div>
+              )}
+            </div>
+          )}
           <div className="flex items-center bg-secondary/60 rounded-lg p-0.5">
             <button onClick={() => setTab("code")}
               className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all ${tab === "code" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
@@ -212,6 +226,19 @@ const ProjectViewer = () => {
             className="flex items-center gap-1 bg-secondary text-foreground px-2.5 py-1 rounded-lg text-[11px] font-medium btn-hover">
             <Download size={11} /> ZIP
           </motion.button>
+          {isOwner && (
+            apkStatus?.apk_url ? (
+              <a href={apkStatus.apk_url} target="_blank" rel="noreferrer"
+                className="flex items-center gap-1 bg-green-500/20 text-green-400 px-2.5 py-1 rounded-lg text-[11px] font-medium">
+                <Smartphone size={11} /> Download APK
+              </a>
+            ) : (
+              <button onClick={requestApk} disabled={apkStatus?.status === "pending"}
+                className="flex items-center gap-1 bg-accent/20 text-accent px-2.5 py-1 rounded-lg text-[11px] font-medium disabled:opacity-60">
+                <Smartphone size={11} /> {apkStatus?.status === "pending" ? "Building…" : "Build APK"}
+              </button>
+            )
+          )}
         </div>
       </div>
 
