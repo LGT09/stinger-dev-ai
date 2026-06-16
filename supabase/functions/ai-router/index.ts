@@ -54,11 +54,12 @@ function jsonErr(error: string, status: number) {
   return new Response(JSON.stringify({ error }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
-function sseFromText(text: string): Response {
+function sseFromText(textIn: any): Response {
+  const text = typeof textIn === "string" ? textIn : JSON.stringify(textIn ?? "");
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     start(c) {
-      const chunks = text.match(/.{1,40}/gs) || [text];
+      const chunks = (text || " ").match(/.{1,40}/gs) || [text || " "];
       let i = 0;
       const push = () => {
         if (i >= chunks.length) { c.enqueue(enc.encode(`data: [DONE]\n\n`)); c.close(); return; }
@@ -109,7 +110,9 @@ async function tryHostify(url: string, prompt: string): Promise<string | null> {
 function extractText(t: string): string | null {
   try {
     const j = JSON.parse(t);
-    return j.response || j.result || j.answer || j.message || j.text || j.data?.response || (typeof j === "string" ? j : null);
+    const cand = j.response || j.result || j.answer || j.message || j.text || j.data?.response;
+    if (cand == null) return typeof j === "string" ? j : null;
+    return typeof cand === "string" ? cand : JSON.stringify(cand);
   } catch {
     return t && t.length > 0 ? t : null;
   }
