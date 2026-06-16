@@ -18,6 +18,8 @@ const providerColor: Record<string, string> = {
   puter: "from-purple-500/20 to-fuchsia-500/10 border-purple-500/30",
   qvac: "from-pink-500/20 to-rose-500/10 border-pink-500/30",
   music: "from-yellow-500/20 to-orange-500/10 border-yellow-500/30",
+  hostify: "from-cyan-500/20 to-sky-500/10 border-cyan-500/30",
+  gaga: "from-violet-500/20 to-fuchsia-500/10 border-violet-500/30",
 };
 
 export default function ModelPickerDialog({ open, onClose, selectedId, onSelect }: Props) {

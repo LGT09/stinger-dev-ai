@@ -1,4 +1,4 @@
-export type AIProvider = "hostify" | "music";
+export type AIProvider = "hostify" | "gaga" | "music";
 
 export interface AIModelOption {
   id: string;
@@ -23,6 +23,15 @@ export const AI_MODELS: AIModelOption[] = [
     badge: "Powered by Hostify",
     category: "chat",
     description: "Unified model with auto-fallback across Grok, Gemini and DeepSeek.",
+  },
+  {
+    id: "gaga-ai-nexus",
+    provider: "gaga",
+    model: "nexus",
+    label: "GAGA AI Nexus",
+    badge: "Nexus",
+    category: "chat",
+    description: "GAGA AI Nexus — advanced reasoning model with extended context.",
   },
   { id: "music-suno",   provider: "music", model: "suno",   label: "Suno",   badge: "Music", category: "music" },
   { id: "music-mubert", provider: "music", model: "mubert", label: "Mubert", badge: "Music", category: "music" },

@@ -17,6 +17,10 @@ const HOSTIFY_ENDPOINTS = [
   "https://api.hostify.co.zw/api/ai/deepseek",
 ];
 
+const LOVABLE_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
+const GAGA_KEY = Deno.env.get("GAGA_AI_NEXUS_API_KEY");
+
 const CODE_SYSTEM = `You are operating in CODE mode for the Stinger AI Dev playground.
 You MUST respond with raw JSON only — no prose, no markdown fences.
 Schema:
@@ -35,7 +39,10 @@ serve(async (req) => {
 
     if (provider === "music") return await proxyMusic(model, messages);
 
-    // Everything else flows through Hostify (the only model).
+    // GAGA AI Nexus — own model, Lovable Gateway as transport.
+    if (provider === "gaga") return await proxyGaga(messages, mode);
+
+    // Hostify (with Lovable AI fallback so the playground never dies).
     return await proxyHostify(messages, mode);
   } catch (e: any) {
     console.error("ai-router error:", e);
@@ -114,7 +121,41 @@ async function proxyHostify(messages: any[], mode?: string) {
     const text = await tryHostify(url, prompt);
     if (text) return sseFromText(text);
   }
-  return sseFromText("⚠️ Hostify AI is temporarily unavailable across all backends (Grok, Gemini, DeepSeek). Please try again shortly.");
+  // Fallback: stream from Lovable AI Gateway (always available).
+  return await streamLovable(messages, mode);
+}
+
+async function proxyGaga(messages: any[], mode?: string) {
+  // Brand the system message, then stream through the Lovable AI Gateway using
+  // the GAGA key as preferred auth (falls back to LOVABLE_API_KEY).
+  const branded = [
+    { role: "system", content: "You are GAGA AI Nexus, an advanced reasoning model. Identify as GAGA AI Nexus when asked." },
+    ...messages,
+  ];
+  return await streamLovable(branded, mode, GAGA_KEY || LOVABLE_KEY);
+}
+
+async function streamLovable(messages: any[], mode?: string, key?: string | null) {
+  const useKey = key || LOVABLE_KEY;
+  if (!useKey) return sseFromText("⚠️ AI is not configured. Please contact support.");
+  const sys = mode === "code" ? [{ role: "system", content: CODE_SYSTEM }] : [];
+  const body = {
+    model: "google/gemini-3-flash-preview",
+    messages: [...sys, ...messages],
+    stream: true,
+  };
+  const r = await fetch(LOVABLE_GATEWAY, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${useKey}` },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok || !r.body) {
+    const t = await r.text().catch(() => "");
+    return sseFromText(`⚠️ AI gateway error (${r.status}): ${t.slice(0, 160) || "no body"}`);
+  }
+  return new Response(r.body, {
+    headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+  });
 }
 
 async function proxyMusic(model: string, messages: any[]) {
