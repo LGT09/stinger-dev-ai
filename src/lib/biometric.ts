@@ -37,18 +37,23 @@ export async function registerPasskey(deviceName = "This device") {
   await authedFetch("register-verify", { response, deviceName });
 }
 
-/** Auto-session login: server returns token_hash, we verifyOtp in place. */
+/** Auto-session login: server returns token_hash / OTP, we verifyOtp in place — no redirect. */
 async function exchangeAndSetSession(email: string, r: { token_hash?: string; email_otp?: string; action_link?: string }) {
+  // Try token_hash with multiple type aliases (SDK version variations).
   if (r.token_hash) {
-    const { error } = await supabase.auth.verifyOtp({ type: "magiclink", token_hash: r.token_hash });
-    if (!error) return true;
+    for (const type of ["magiclink", "email"] as const) {
+      const { error } = await supabase.auth.verifyOtp({ type: type as any, token_hash: r.token_hash });
+      if (!error) return true;
+    }
   }
   if (r.email_otp) {
-    const { error } = await supabase.auth.verifyOtp({ type: "magiclink", email, token: r.email_otp });
-    if (!error) return true;
+    for (const type of ["magiclink", "email"] as const) {
+      const { error } = await supabase.auth.verifyOtp({ type: type as any, email, token: r.email_otp });
+      if (!error) return true;
+    }
   }
   if (r.action_link) { window.location.href = r.action_link; return true; }
-  throw new Error("No session token returned");
+  throw new Error("Sign-in succeeded but session could not be restored. Please refresh.");
 }
 
 export async function loginWithPasskey(email: string) {
