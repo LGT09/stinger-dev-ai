@@ -27,9 +27,13 @@ async function getUserFromAuth(req: Request) {
 }
 
 function getRpInfo(req: Request) {
-  const origin = req.headers.get("origin") || "";
-  const url = new URL(origin || "https://example.com");
-  return { rpID: url.hostname, origin };
+  const origin = req.headers.get("origin") || req.headers.get("referer") || "";
+  try {
+    const url = new URL(origin);
+    return { rpID: url.hostname, origin: url.origin };
+  } catch {
+    return { rpID: "localhost", origin: "http://localhost" };
+  }
 }
 
 serve(async (req) => {
@@ -64,15 +68,16 @@ serve(async (req) => {
       if (!user) return json({ error: "Login required" }, 401);
       const { data: ch } = await admin.from("webauthn_challenges")
         .select("*").eq("identifier", user.id).eq("type", "register")
-        .order("created_at", { ascending: false }).limit(1).single();
-      if (!ch) return json({ error: "Challenge not found" }, 400);
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (!ch) return json({ error: "Challenge expired — please retry" }, 400);
 
       const verification = await verifyRegistrationResponse({
         response: body.response,
         expectedChallenge: ch.challenge,
         expectedOrigin: origin,
         expectedRPID: rpID,
-      });
+      }).catch((e) => { console.error("reg verify", e); return null as any; });
+      if (!verification) return json({ error: "Could not verify passkey" }, 400);
       if (!verification.verified || !verification.registrationInfo) return json({ error: "Verification failed" }, 400);
       const { credential } = verification.registrationInfo as any;
       const credId = credential.id;
@@ -112,9 +117,9 @@ serve(async (req) => {
       if (!email || !credId) return json({ error: "email and credential required" }, 400);
       const { data: ch } = await admin.from("webauthn_challenges")
         .select("*").eq("identifier", email).eq("type", "auth")
-        .order("created_at", { ascending: false }).limit(1).single();
-      if (!ch) return json({ error: "Challenge not found" }, 400);
-      const { data: pk } = await admin.from("user_passkeys").select("*").eq("credential_id", credId).single();
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (!ch) return json({ error: "Challenge expired — please retry" }, 400);
+      const { data: pk } = await admin.from("user_passkeys").select("*").eq("credential_id", credId).maybeSingle();
       if (!pk) return json({ error: "Passkey not registered" }, 404);
 
       const publicKey = Uint8Array.from(atob(pk.public_key), c => c.charCodeAt(0));
@@ -124,8 +129,8 @@ serve(async (req) => {
         expectedOrigin: origin,
         expectedRPID: rpID,
         credential: { id: pk.credential_id, publicKey, counter: Number(pk.counter) },
-      });
-      if (!verification.verified) return json({ error: "Verification failed" }, 400);
+      }).catch((e) => { console.error("auth verify", e); return null as any; });
+      if (!verification || !verification.verified) return json({ error: "Biometric verification failed" }, 400);
       await admin.from("user_passkeys").update({
         counter: verification.authenticationInfo.newCounter,
         last_used_at: new Date().toISOString(),
@@ -186,15 +191,16 @@ serve(async (req) => {
       if (!userId || !email) return json({ error: "userId and email required" }, 400);
       const { data: ch } = await admin.from("webauthn_challenges")
         .select("*").eq("identifier", userId).eq("type", "register")
-        .order("created_at", { ascending: false }).limit(1).single();
-      if (!ch) return json({ error: "Challenge not found" }, 400);
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (!ch) return json({ error: "Challenge expired — please retry" }, 400);
 
       const verification = await verifyRegistrationResponse({
         response: body.response,
         expectedChallenge: ch.challenge,
         expectedOrigin: origin,
         expectedRPID: rpID,
-      });
+      }).catch((e) => { console.error("signup verify", e); return null as any; });
+      if (!verification) return json({ error: "Could not verify passkey" }, 400);
       if (!verification.verified || !verification.registrationInfo) return json({ error: "Verification failed" }, 400);
       const { credential } = verification.registrationInfo as any;
       const credId = credential.id;
