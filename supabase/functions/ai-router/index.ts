@@ -110,7 +110,10 @@ async function tryHostify(url: string, prompt: string): Promise<string | null> {
 function extractText(t: string): string | null {
   try {
     const j = JSON.parse(t);
-    const cand = j.response || j.result || j.answer || j.message || j.text || j.data?.response;
+    const cand =
+      j.response?.answer || j.response?.text || j.response?.message || j.response ||
+      j.result || j.answer || j.message || j.text ||
+      j.data?.response || j.data?.answer || j.data?.text;
     if (cand == null) return typeof j === "string" ? j : null;
     return typeof cand === "string" ? cand : JSON.stringify(cand);
   } catch {
