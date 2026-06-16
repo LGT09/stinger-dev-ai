@@ -126,13 +126,30 @@ async function proxyHostify(messages: any[], mode?: string) {
 }
 
 async function proxyGaga(messages: any[], mode?: string) {
-  // Brand the system message, then stream through the Lovable AI Gateway using
-  // the GAGA key as preferred auth (falls back to LOVABLE_API_KEY).
   const branded = [
     { role: "system", content: "You are GAGA AI Nexus, an advanced reasoning model. Identify as GAGA AI Nexus when asked." },
     ...messages,
   ];
-  return await streamLovable(branded, mode, GAGA_KEY || LOVABLE_KEY);
+  // Try GAGA's native endpoint first (Hyperbolic-compatible OpenAI schema).
+  if (GAGA_KEY) {
+    try {
+      const r = await fetch("https://api.hyperbolic.xyz/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${GAGA_KEY}` },
+        body: JSON.stringify({
+          model: "meta-llama/Meta-Llama-3.1-70B-Instruct",
+          messages: branded,
+          stream: true,
+          max_tokens: 2048,
+        }),
+      });
+      if (r.ok && r.body) {
+        return new Response(r.body, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+      }
+    } catch (e) { console.error("GAGA native failed", e); }
+  }
+  // Fallback: Lovable Gateway (always available).
+  return await streamLovable(branded, mode);
 }
 
 async function streamLovable(messages: any[], mode?: string, key?: string | null) {
