@@ -231,7 +231,9 @@ The JSON must have this structure:
   "suggestions": ["Add authentication", "Add database", "Add dark mode"]
 }
 
-Generate complete, production-ready files. Include all necessary files for the project. Include package.json with dependencies. The terminal array should list commands to install dependencies. Use modern fonts (import via <link> in index.html) and varied typography to make the output look superb.`;
+Generate complete, production-ready files. Include all necessary files for the project. Include package.json with dependencies. The terminal array should list commands to install dependencies. Use modern fonts (import via <link> in index.html) and varied typography to make the output look superb.
+
+ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, avatar, background), write the placeholder [[image: detailed description of the image]] directly in the file where the image URL belongs (e.g. <img src="[[image: modern hero shot of a coffee shop]]" />). Stinger's private image engine will generate the image and replace the placeholder with a real image before the project is saved. Never link to external stock photo URLs.`;
   };
 
   // Parse code mode response into files
