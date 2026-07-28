@@ -594,6 +594,7 @@ Generate complete, production-ready files. Include all necessary files for the p
 
         // Parse the response into project files
         const result = parseCodeResponse(assistantContent);
+        result.files = await resolveAssetCommands(result.files);
         if (result.files.length > 0) {
           setProjectFiles(result.files);
           setActiveFile(result.files[0]);
