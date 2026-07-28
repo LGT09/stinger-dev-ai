@@ -20,7 +20,10 @@ export type Database = {
           created_at: string
           error: string | null
           id: string
+          progress: number
           project_id: string
+          project_name: string | null
+          stage: string | null
           status: string
           updated_at: string
           user_id: string
@@ -30,7 +33,10 @@ export type Database = {
           created_at?: string
           error?: string | null
           id?: string
+          progress?: number
           project_id: string
+          project_name?: string | null
+          stage?: string | null
           status?: string
           updated_at?: string
           user_id: string
@@ -40,7 +46,10 @@ export type Database = {
           created_at?: string
           error?: string | null
           id?: string
+          progress?: number
           project_id?: string
+          project_name?: string | null
+          stage?: string | null
           status?: string
           updated_at?: string
           user_id?: string
@@ -117,6 +126,59 @@ export type Database = {
         }
         Relationships: []
       }
+      deployments: {
+        Row: {
+          created_at: string
+          html: string
+          id: string
+          project_id: string | null
+          slug: string
+          status: string
+          title: string
+          updated_at: string
+          url: string | null
+          user_id: string
+          username: string
+          visits: number
+        }
+        Insert: {
+          created_at?: string
+          html?: string
+          id?: string
+          project_id?: string | null
+          slug: string
+          status?: string
+          title?: string
+          updated_at?: string
+          url?: string | null
+          user_id: string
+          username: string
+          visits?: number
+        }
+        Update: {
+          created_at?: string
+          html?: string
+          id?: string
+          project_id?: string | null
+          slug?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          url?: string | null
+          user_id?: string
+          username?: string
+          visits?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deployments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -134,6 +196,7 @@ export type Database = {
           referred_by: string | null
           updated_at: string
           user_id: string
+          username: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -151,6 +214,7 @@ export type Database = {
           referred_by?: string | null
           updated_at?: string
           user_id: string
+          username?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -168,6 +232,7 @@ export type Database = {
           referred_by?: string | null
           updated_at?: string
           user_id?: string
+          username?: string | null
         }
         Relationships: []
       }
@@ -471,6 +536,36 @@ export type Database = {
           os?: string | null
           user_agent?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      verification_codes: {
+        Row: {
+          code: string
+          consumed: boolean
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          purpose: string
+        }
+        Insert: {
+          code: string
+          consumed?: boolean
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          purpose?: string
+        }
+        Update: {
+          code?: string
+          consumed?: boolean
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          purpose?: string
         }
         Relationships: []
       }
