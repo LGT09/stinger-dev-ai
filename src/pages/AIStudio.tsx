@@ -279,6 +279,44 @@ Generate complete, production-ready files. Include all necessary files for the p
     setTerminalLines(prev => [...prev, { type, text }]);
   };
 
+  /** Private image generation helper — used by chat, terminal and code mode. */
+  const generateImage = async (prompt: string): Promise<string> => {
+    const resp = await fetch(`${FN_BASE}/generate-image`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.image) throw new Error(data.error || "Image generation failed");
+    return data.image as string;
+  };
+
+  /**
+   * Lets the AI request assets while building: any `[[image: a red sports car]]`
+   * placeholder inside generated files is replaced with a real generated image.
+   */
+  const resolveAssetCommands = async (files: ProjectFile[]): Promise<ProjectFile[]> => {
+    const re = /\[\[image:\s*([^\]]+)\]\]/gi;
+    const cache = new Map<string, string>();
+    const out: ProjectFile[] = [];
+    for (const f of files) {
+      let content = f.content;
+      const prompts = [...content.matchAll(re)].map(m => m[1].trim());
+      for (const p of prompts) {
+        if (!cache.has(p)) {
+          addTerminalLine("system", `🎨 generating asset: ${p.slice(0, 60)}`);
+          try { cache.set(p, await generateImage(p)); }
+          catch (e: any) { addTerminalLine("error", `asset failed: ${e.message}`); cache.set(p, ""); }
+        }
+        const url = cache.get(p) || "";
+        if (url) content = content.split(`[[image: ${p}]]`).join(url).replace(re, url);
+      }
+      out.push({ ...f, content });
+    }
+    if (cache.size) addTerminalLine("output", `✓ ${cache.size} image asset(s) generated`);
+    return out;
+  };
+
   const handleTerminalCommand = async (cmd: string) => {
     if (!cmd.trim()) return;
     addTerminalLine("input", `$ ${cmd}`);
@@ -302,7 +340,17 @@ Generate complete, production-ready files. Include all necessary files for the p
     } else if (c === "clear") {
       setTerminalLines([{ type: "system", text: "Terminal cleared." }]);
     } else if (c === "help") {
-      addTerminalLine("output", "Commands: ls, cat <file>, npm install <pkg>, clear, help, build, deploy");
+      addTerminalLine("output", "Commands: ls, cat <file>, npm install <pkg>, image <prompt>, clear, help, build, deploy");
+    } else if (c.startsWith("image ")) {
+      const p = cmd.slice(6).trim();
+      addTerminalLine("system", `🎨 Generating image: ${p}`);
+      try {
+        const url = await generateImage(p);
+        setMessages(prev => [...prev, { role: "assistant", content: `🖼️ Generated asset: _${p}_`, images: [url] }]);
+        addTerminalLine("output", "✓ Image generated — added to the chat panel");
+      } catch (e: any) {
+        addTerminalLine("error", e.message || "Image generation failed");
+      }
     } else if (c === "build") {
       addTerminalLine("system", "Building project...");
       await new Promise(r => setTimeout(r, 1500));
