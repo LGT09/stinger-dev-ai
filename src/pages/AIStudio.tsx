@@ -62,6 +62,9 @@ interface TerminalLine {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 const AI_ROUTER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-router`;
+const FN_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+
+interface Attachment { name: string; kind: "image" | "text" | "audio"; dataUrl?: string; text?: string }
 
 const AIStudio = () => {
   const { user, tokenBalance, refreshTokens, isAdmin } = useAuth();
@@ -92,11 +95,23 @@ const AIStudio = () => {
   const [buildingProject, setBuildingProject] = useState(false);
   const [selectedModelId, setSelectedModelId] = useState<string>(DEFAULT_MODEL_ID);
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [transcribing, setTranscribing] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const threadRef = useRef<string | null>(null);
+
+  // Auto-grow the composer downwards (never sideways) with an internal scrollbar.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [input]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -106,35 +121,64 @@ const AIStudio = () => {
     terminalEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [terminalLines]);
 
-  useEffect(() => {
-    const saved = localStorage.getItem("stinger-chat-history");
-    if (saved) setChatSessions(JSON.parse(saved));
-  }, []);
+  // ---- Persistent chat history (database-backed, per user) ----
+  const loadThreads = useCallback(async () => {
+    if (!user) {
+      const saved = localStorage.getItem("stinger-chat-history");
+      if (saved) { try { setChatSessions(JSON.parse(saved)); } catch { /* ignore */ } }
+      return;
+    }
+    const { data } = await supabase
+      .from("chat_threads").select("id, title, mode, updated_at")
+      .eq("user_id", user.id).order("updated_at", { ascending: false }).limit(50);
+    if (data) {
+      setChatSessions(data.map(t => ({
+        id: t.id, title: t.title, mode: (t.mode as AIMode) || "chat",
+        messages: [], timestamp: new Date(t.updated_at).getTime(),
+      })));
+    }
+  }, [user]);
 
-  const saveChatHistory = useCallback((sessions: ChatSession[]) => {
-    const limited = sessions.slice(0, 50);
-    localStorage.setItem("stinger-chat-history", JSON.stringify(limited));
-    setChatSessions(limited);
-  }, []);
+  useEffect(() => { loadThreads(); }, [loadThreads]);
+
+  const ensureThread = async (firstMessage: string): Promise<string | null> => {
+    if (!user) return null;
+    if (threadRef.current) return threadRef.current;
+    const { data } = await supabase.from("chat_threads")
+      .insert({ user_id: user.id, title: firstMessage.slice(0, 60) || "New chat", mode })
+      .select("id").single();
+    threadRef.current = data?.id || null;
+    return threadRef.current;
+  };
+
+  const persistMessage = async (role: "user" | "assistant", content: string) => {
+    if (!user || !content.trim()) return;
+    const tid = await ensureThread(content);
+    if (!tid) return;
+    await supabase.from("chat_messages").insert({ thread_id: tid, user_id: user.id, role, content });
+    await supabase.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", tid);
+    loadThreads();
+  };
 
   const startNewChat = () => {
-    if (messages.length > 1) {
-      const title = messages.find(m => m.role === "user")?.content.slice(0, 50) || "Untitled";
-      const session: ChatSession = { id: Date.now().toString(), title, messages, mode, timestamp: Date.now() };
-      saveChatHistory([session, ...chatSessions]);
-    }
+    threadRef.current = null;
     setMessages([{ role: "assistant", content: "New conversation started. I'm **Stinger AI** by Vincent Ganiza (Traxxion Tech). How can I help you?" }]);
     setSuggestions([]);
     setShowSuggestions(false);
     setProjectFiles([]);
     setActiveFile(null);
+    setAttachments([]);
     setTerminalLines(prev => [...prev, { type: "system", text: "--- New session ---" }]);
   };
 
-  const loadSession = (session: ChatSession) => {
-    setMessages(session.messages);
+  const loadSession = async (session: ChatSession) => {
     setMode(session.mode);
     setShowHistory(false);
+    if (!user) { setMessages(session.messages); return; }
+    threadRef.current = session.id;
+    const { data } = await supabase.from("chat_messages")
+      .select("role, content").eq("thread_id", session.id).order("created_at", { ascending: true });
+    setMessages((data || []).map(m => ({ role: m.role as "user" | "assistant", content: m.content })));
   };
 
   const getTokenCost = (responseLength: number): number => {
