@@ -730,14 +730,54 @@ Generate complete, production-ready files. Include all necessary files for the p
 
   const handleFileAttach = () => fileInputRef.current?.click();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setInput(prev => prev + `\n\n[Attached: ${file.name}]\n${(reader.result as string).slice(0, 2000)}`);
-      toast.success(`${file.name} attached`);
-    };
-    reader.readAsText(file); e.target.value = "";
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (files.length === 0) return;
+
+    for (const file of files) {
+      if (file.size > 8 * 1024 * 1024) { toast.error(`${file.name} is larger than 8MB`); continue; }
+      const isImage = file.type.startsWith("image/");
+      const dataOrText = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("read failed"));
+        if (isImage) reader.readAsDataURL(file); else reader.readAsText(file);
+      }).catch(() => null as unknown as string);
+      if (!dataOrText) { toast.error(`Could not read ${file.name}`); continue; }
+      setAttachments(prev => [...prev, isImage
+        ? { name: file.name, kind: "image", dataUrl: dataOrText }
+        : { name: file.name, kind: "text", text: dataOrText.slice(0, 8000) }]);
+    }
+    toast.success(files.length > 1 ? `${files.length} files attached` : `${files[0].name} attached`);
+  };
+
+  const removeAttachment = (idx: number) => setAttachments(prev => prev.filter((_, i) => i !== idx));
+
+  const transcribeAudio = async (blob: Blob) => {
+    setTranscribing(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1] || "");
+        reader.onerror = () => reject(new Error("read failed"));
+        reader.readAsDataURL(blob);
+      });
+      const resp = await fetch(`${FN_BASE}/voice-transcribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
+        body: JSON.stringify({ audio: base64, mime: blob.type || "audio/webm" }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.text) throw new Error(data.error || "Transcription failed");
+      setInput(prev => (prev ? `${prev} ${data.text}` : data.text));
+      inputRef.current?.focus();
+      toast.success("Voice note transcribed");
+    } catch (err: any) {
+      toast.error(err.message || "Could not transcribe the voice note");
+    } finally {
+      setTranscribing(false);
+    }
   };
 
   const toggleRecording = async () => {
@@ -746,9 +786,15 @@ Generate complete, production-ready files. Include all necessary files for the p
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
       const chunks: Blob[] = [];
-      recorder.ondataavailable = e => chunks.push(e.data);
-      recorder.onstop = () => { stream.getTracks().forEach(t => t.stop()); toast.info("Audio recorded"); };
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size < 1000) { toast.error("Recording was too short"); return; }
+        await transcribeAudio(blob);
+      };
       recorder.start(); mediaRecorderRef.current = recorder; setIsRecording(true);
+      toast.info("Recording… tap the mic again to send");
     } catch { toast.error("Microphone access denied"); }
   };
 
