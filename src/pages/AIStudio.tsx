@@ -462,9 +462,8 @@ Generate complete, production-ready files. Include all necessary files for the p
         return;
       }
 
-      // Image mode keeps using the multimodal Lovable AI image model via /chat
-      // Route to AI router (DeepSeek / Anthropic / davidcyril) or to /chat for image-gen.
-      let endpoint = AI_ROUTER_URL;
+      // Route to AI router (Hostify / DeepSeek / Anthropic / GAGA).
+      const endpoint = AI_ROUTER_URL;
       const requestBody: any = {
         provider: selectedModel.provider,
         model: selectedModel.model,
@@ -475,21 +474,13 @@ Generate complete, production-ready files. Include all necessary files for the p
         ],
       };
 
-      if (isImageGen) {
-        // Image gen still uses Lovable AI /chat endpoint behind the scenes (kept for image multimodal only)
-        endpoint = CHAT_URL;
-        requestBody.model = "google/gemini-3.1-flash-image-preview";
-        requestBody.modalities = ["image", "text"];
-        delete requestBody.provider;
-      }
-
       if (mode === "code") {
         setBuildingProject(true);
         addTerminalLine("system", `🔨 Building: "${input.slice(0, 80)}..."`);
       }
 
       // Client-only providers (Puter / Qvac) bypass the edge function entirely
-      if (!isImageGen && isClientProvider(selectedModel.provider)) {
+      if (isClientProvider(selectedModel.provider)) {
         const runner = selectedModel.provider === "puter" ? streamPuter : streamQvac;
         await new Promise<void>((resolve) => {
           let started = false;
@@ -526,13 +517,7 @@ Generate complete, production-ready files. Include all necessary files for the p
         throw new Error(err.error || `Error ${resp.status}`);
       }
 
-      if (isImageGen) {
-        const data = await resp.json();
-        const content = data.choices?.[0]?.message?.content || "Image generated!";
-        const images = data.choices?.[0]?.message?.images?.map((img: any) => img.image_url?.url).filter(Boolean) || [];
-        assistantContent = content;
-        setMessages(prev => [...prev, { role: "assistant", content, images }]);
-      } else if (mode === "code") {
+      if (mode === "code") {
         // For code mode: don't show in chat, parse into files
         if (!resp.body) throw new Error("No response stream");
         const reader = resp.body.getReader();
