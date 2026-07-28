@@ -60,8 +60,10 @@ interface TerminalLine {
   text: string;
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 const AI_ROUTER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-router`;
+const FN_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+
+interface Attachment { name: string; kind: "image" | "text" | "audio"; dataUrl?: string; text?: string }
 
 const AIStudio = () => {
   const { user, tokenBalance, refreshTokens, isAdmin } = useAuth();
@@ -92,11 +94,23 @@ const AIStudio = () => {
   const [buildingProject, setBuildingProject] = useState(false);
   const [selectedModelId, setSelectedModelId] = useState<string>(DEFAULT_MODEL_ID);
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [transcribing, setTranscribing] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const threadRef = useRef<string | null>(null);
+
+  // Auto-grow the composer downwards (never sideways) with an internal scrollbar.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [input]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -106,35 +120,64 @@ const AIStudio = () => {
     terminalEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [terminalLines]);
 
-  useEffect(() => {
-    const saved = localStorage.getItem("stinger-chat-history");
-    if (saved) setChatSessions(JSON.parse(saved));
-  }, []);
+  // ---- Persistent chat history (database-backed, per user) ----
+  const loadThreads = useCallback(async () => {
+    if (!user) {
+      const saved = localStorage.getItem("stinger-chat-history");
+      if (saved) { try { setChatSessions(JSON.parse(saved)); } catch { /* ignore */ } }
+      return;
+    }
+    const { data } = await supabase
+      .from("chat_threads").select("id, title, mode, updated_at")
+      .eq("user_id", user.id).order("updated_at", { ascending: false }).limit(50);
+    if (data) {
+      setChatSessions(data.map(t => ({
+        id: t.id, title: t.title, mode: (t.mode as AIMode) || "chat",
+        messages: [], timestamp: new Date(t.updated_at).getTime(),
+      })));
+    }
+  }, [user]);
 
-  const saveChatHistory = useCallback((sessions: ChatSession[]) => {
-    const limited = sessions.slice(0, 50);
-    localStorage.setItem("stinger-chat-history", JSON.stringify(limited));
-    setChatSessions(limited);
-  }, []);
+  useEffect(() => { loadThreads(); }, [loadThreads]);
+
+  const ensureThread = async (firstMessage: string): Promise<string | null> => {
+    if (!user) return null;
+    if (threadRef.current) return threadRef.current;
+    const { data } = await supabase.from("chat_threads")
+      .insert({ user_id: user.id, title: firstMessage.slice(0, 60) || "New chat", mode })
+      .select("id").single();
+    threadRef.current = data?.id || null;
+    return threadRef.current;
+  };
+
+  const persistMessage = async (role: "user" | "assistant", content: string) => {
+    if (!user || !content.trim()) return;
+    const tid = await ensureThread(content);
+    if (!tid) return;
+    await supabase.from("chat_messages").insert({ thread_id: tid, user_id: user.id, role, content });
+    await supabase.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", tid);
+    loadThreads();
+  };
 
   const startNewChat = () => {
-    if (messages.length > 1) {
-      const title = messages.find(m => m.role === "user")?.content.slice(0, 50) || "Untitled";
-      const session: ChatSession = { id: Date.now().toString(), title, messages, mode, timestamp: Date.now() };
-      saveChatHistory([session, ...chatSessions]);
-    }
+    threadRef.current = null;
     setMessages([{ role: "assistant", content: "New conversation started. I'm **Stinger AI** by Vincent Ganiza (Traxxion Tech). How can I help you?" }]);
     setSuggestions([]);
     setShowSuggestions(false);
     setProjectFiles([]);
     setActiveFile(null);
+    setAttachments([]);
     setTerminalLines(prev => [...prev, { type: "system", text: "--- New session ---" }]);
   };
 
-  const loadSession = (session: ChatSession) => {
-    setMessages(session.messages);
+  const loadSession = async (session: ChatSession) => {
     setMode(session.mode);
     setShowHistory(false);
+    if (!user) { setMessages(session.messages); return; }
+    threadRef.current = session.id;
+    const { data } = await supabase.from("chat_messages")
+      .select("role, content").eq("thread_id", session.id).order("created_at", { ascending: true });
+    setMessages((data || []).map(m => ({ role: m.role as "user" | "assistant", content: m.content })));
   };
 
   const getTokenCost = (responseLength: number): number => {
@@ -188,7 +231,9 @@ The JSON must have this structure:
   "suggestions": ["Add authentication", "Add database", "Add dark mode"]
 }
 
-Generate complete, production-ready files. Include all necessary files for the project. Include package.json with dependencies. The terminal array should list commands to install dependencies. Use modern fonts (import via <link> in index.html) and varied typography to make the output look superb.`;
+Generate complete, production-ready files. Include all necessary files for the project. Include package.json with dependencies. The terminal array should list commands to install dependencies. Use modern fonts (import via <link> in index.html) and varied typography to make the output look superb.
+
+ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, avatar, background), write the placeholder [[image: detailed description of the image]] directly in the file where the image URL belongs (e.g. <img src="[[image: modern hero shot of a coffee shop]]" />). Stinger's private image engine will generate the image and replace the placeholder with a real image before the project is saved. Never link to external stock photo URLs.`;
   };
 
   // Parse code mode response into files
@@ -236,6 +281,44 @@ Generate complete, production-ready files. Include all necessary files for the p
     setTerminalLines(prev => [...prev, { type, text }]);
   };
 
+  /** Private image generation helper — used by chat, terminal and code mode. */
+  const generateImage = async (prompt: string): Promise<string> => {
+    const resp = await fetch(`${FN_BASE}/generate-image`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.image) throw new Error(data.error || "Image generation failed");
+    return data.image as string;
+  };
+
+  /**
+   * Lets the AI request assets while building: any `[[image: a red sports car]]`
+   * placeholder inside generated files is replaced with a real generated image.
+   */
+  const resolveAssetCommands = async (files: ProjectFile[]): Promise<ProjectFile[]> => {
+    const re = /\[\[image:\s*([^\]]+)\]\]/gi;
+    const cache = new Map<string, string>();
+    const out: ProjectFile[] = [];
+    for (const f of files) {
+      let content = f.content;
+      const prompts = [...content.matchAll(re)].map(m => m[1].trim());
+      for (const p of prompts) {
+        if (!cache.has(p)) {
+          addTerminalLine("system", `🎨 generating asset: ${p.slice(0, 60)}`);
+          try { cache.set(p, await generateImage(p)); }
+          catch (e: any) { addTerminalLine("error", `asset failed: ${e.message}`); cache.set(p, ""); }
+        }
+        const url = cache.get(p) || "";
+        if (url) content = content.split(`[[image: ${p}]]`).join(url).replace(re, url);
+      }
+      out.push({ ...f, content });
+    }
+    if (cache.size) addTerminalLine("output", `✓ ${cache.size} image asset(s) generated`);
+    return out;
+  };
+
   const handleTerminalCommand = async (cmd: string) => {
     if (!cmd.trim()) return;
     addTerminalLine("input", `$ ${cmd}`);
@@ -259,7 +342,17 @@ Generate complete, production-ready files. Include all necessary files for the p
     } else if (c === "clear") {
       setTerminalLines([{ type: "system", text: "Terminal cleared." }]);
     } else if (c === "help") {
-      addTerminalLine("output", "Commands: ls, cat <file>, npm install <pkg>, clear, help, build, deploy");
+      addTerminalLine("output", "Commands: ls, cat <file>, npm install <pkg>, image <prompt>, clear, help, build, deploy");
+    } else if (c.startsWith("image ")) {
+      const p = cmd.slice(6).trim();
+      addTerminalLine("system", `🎨 Generating image: ${p}`);
+      try {
+        const url = await generateImage(p);
+        setMessages(prev => [...prev, { role: "assistant", content: `🖼️ Generated asset: _${p}_`, images: [url] }]);
+        addTerminalLine("output", "✓ Image generated — added to the chat panel");
+      } catch (e: any) {
+        addTerminalLine("error", e.message || "Image generation failed");
+      }
     } else if (c === "build") {
       addTerminalLine("system", "Building project...");
       await new Promise(r => setTimeout(r, 1500));
@@ -274,19 +367,27 @@ Generate complete, production-ready files. Include all necessary files for the p
   };
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && attachments.length === 0) || isLoading) return;
     if (!isAdmin && tokenBalance <= 0) {
       toast.error("No tokens remaining. Share your referral link or wait for monthly refill.");
       return;
     }
 
-    const userMsg: Message = { role: "user", content: input };
+    const attachedText = attachments
+      .filter(a => a.kind !== "image" && a.text)
+      .map(a => `\n\n[Attached: ${a.name}]\n${a.text}`).join("");
+    const attachedImages = attachments.filter(a => a.kind === "image" && a.dataUrl).map(a => a.dataUrl!);
+    const outgoing = `${input}${attachedText}`.trim();
+
+    const userMsg: Message = { role: "user", content: input || "(attachment)", images: attachedImages.length ? attachedImages : undefined };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput("");
+    setAttachments([]);
     setIsLoading(true);
     setShowSuggestions(false);
     setSuggestions([]);
+    void persistMessage("user", outgoing || "(attachment)");
 
     let assistantContent = "";
 
@@ -297,12 +398,34 @@ Generate complete, production-ready files. Include all necessary files for the p
       const selectedModel = getModelById(selectedModelId);
 
       // Music goes through ai-router (Suno/Mubert via davidcyril). Video stays on generate-media.
+      if (isImageGen) {
+        // Private image provider — endpoint & key live only in the edge function.
+        const resp = await fetch(`${FN_BASE}/generate-image`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
+          body: JSON.stringify({ prompt: outgoing }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.image) throw new Error(data.error || "Image generation failed");
+        assistantContent = `🖼️ Here's your image for: _${outgoing.slice(0, 120)}_`;
+        setMessages(prev => [...prev, { role: "assistant", content: assistantContent, images: [data.image] }]);
+        void persistMessage("assistant", assistantContent);
+        if (user && !isAdmin) {
+          const cost = getTokenCost(500);
+          await supabase.from("token_balances").update({ balance: Math.max(0, tokenBalance - cost) }).eq("user_id", user.id);
+          await supabase.from("token_transactions").insert({ user_id: user.id, amount: -cost, action: "image generation", description: outgoing.slice(0, 100) });
+          refreshTokens();
+        }
+        setIsLoading(false);
+        return;
+      }
+
       if (isMusicGen) {
         const musicModel = selectedModel.provider === "music" ? selectedModel.model : "suno";
         const resp = await fetch(AI_ROUTER_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
-          body: JSON.stringify({ provider: "music", model: musicModel, messages: [{ role: "user", content: input }] }),
+          body: JSON.stringify({ provider: "music", model: musicModel, messages: [{ role: "user", content: outgoing }] }),
         });
         if (!resp.ok || !resp.body) throw new Error("Music generation failed");
         const reader = resp.body.getReader();
@@ -388,9 +511,8 @@ Generate complete, production-ready files. Include all necessary files for the p
         return;
       }
 
-      // Image mode keeps using the multimodal Lovable AI image model via /chat
-      // Route to AI router (DeepSeek / Anthropic / davidcyril) or to /chat for image-gen.
-      let endpoint = AI_ROUTER_URL;
+      // Route to AI router (Hostify / DeepSeek / Anthropic / GAGA).
+      const endpoint = AI_ROUTER_URL;
       const requestBody: any = {
         provider: selectedModel.provider,
         model: selectedModel.model,
@@ -401,21 +523,13 @@ Generate complete, production-ready files. Include all necessary files for the p
         ],
       };
 
-      if (isImageGen) {
-        // Image gen still uses Lovable AI /chat endpoint behind the scenes (kept for image multimodal only)
-        endpoint = CHAT_URL;
-        requestBody.model = "google/gemini-3.1-flash-image-preview";
-        requestBody.modalities = ["image", "text"];
-        delete requestBody.provider;
-      }
-
       if (mode === "code") {
         setBuildingProject(true);
         addTerminalLine("system", `🔨 Building: "${input.slice(0, 80)}..."`);
       }
 
       // Client-only providers (Puter / Qvac) bypass the edge function entirely
-      if (!isImageGen && isClientProvider(selectedModel.provider)) {
+      if (isClientProvider(selectedModel.provider)) {
         const runner = selectedModel.provider === "puter" ? streamPuter : streamQvac;
         await new Promise<void>((resolve) => {
           let started = false;
@@ -452,13 +566,7 @@ Generate complete, production-ready files. Include all necessary files for the p
         throw new Error(err.error || `Error ${resp.status}`);
       }
 
-      if (isImageGen) {
-        const data = await resp.json();
-        const content = data.choices?.[0]?.message?.content || "Image generated!";
-        const images = data.choices?.[0]?.message?.images?.map((img: any) => img.image_url?.url).filter(Boolean) || [];
-        assistantContent = content;
-        setMessages(prev => [...prev, { role: "assistant", content, images }]);
-      } else if (mode === "code") {
+      if (mode === "code") {
         // For code mode: don't show in chat, parse into files
         if (!resp.body) throw new Error("No response stream");
         const reader = resp.body.getReader();
@@ -488,6 +596,7 @@ Generate complete, production-ready files. Include all necessary files for the p
 
         // Parse the response into project files
         const result = parseCodeResponse(assistantContent);
+        result.files = await resolveAssetCommands(result.files);
         if (result.files.length > 0) {
           setProjectFiles(result.files);
           setActiveFile(result.files[0]);
@@ -572,6 +681,8 @@ Generate complete, production-ready files. Include all necessary files for the p
           }
         }
       }
+
+      if (assistantContent.trim()) void persistMessage("assistant", assistantContent);
 
       // Token deduction
       if (user && !isAdmin) {
@@ -669,14 +780,54 @@ Generate complete, production-ready files. Include all necessary files for the p
 
   const handleFileAttach = () => fileInputRef.current?.click();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setInput(prev => prev + `\n\n[Attached: ${file.name}]\n${(reader.result as string).slice(0, 2000)}`);
-      toast.success(`${file.name} attached`);
-    };
-    reader.readAsText(file); e.target.value = "";
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (files.length === 0) return;
+
+    for (const file of files) {
+      if (file.size > 8 * 1024 * 1024) { toast.error(`${file.name} is larger than 8MB`); continue; }
+      const isImage = file.type.startsWith("image/");
+      const dataOrText = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("read failed"));
+        if (isImage) reader.readAsDataURL(file); else reader.readAsText(file);
+      }).catch(() => null as unknown as string);
+      if (!dataOrText) { toast.error(`Could not read ${file.name}`); continue; }
+      setAttachments(prev => [...prev, isImage
+        ? { name: file.name, kind: "image", dataUrl: dataOrText }
+        : { name: file.name, kind: "text", text: dataOrText.slice(0, 8000) }]);
+    }
+    toast.success(files.length > 1 ? `${files.length} files attached` : `${files[0].name} attached`);
+  };
+
+  const removeAttachment = (idx: number) => setAttachments(prev => prev.filter((_, i) => i !== idx));
+
+  const transcribeAudio = async (blob: Blob) => {
+    setTranscribing(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1] || "");
+        reader.onerror = () => reject(new Error("read failed"));
+        reader.readAsDataURL(blob);
+      });
+      const resp = await fetch(`${FN_BASE}/voice-transcribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
+        body: JSON.stringify({ audio: base64, mime: blob.type || "audio/webm" }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.text) throw new Error(data.error || "Transcription failed");
+      setInput(prev => (prev ? `${prev} ${data.text}` : data.text));
+      inputRef.current?.focus();
+      toast.success("Voice note transcribed");
+    } catch (err: any) {
+      toast.error(err.message || "Could not transcribe the voice note");
+    } finally {
+      setTranscribing(false);
+    }
   };
 
   const toggleRecording = async () => {
@@ -685,9 +836,15 @@ Generate complete, production-ready files. Include all necessary files for the p
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
       const chunks: Blob[] = [];
-      recorder.ondataavailable = e => chunks.push(e.data);
-      recorder.onstop = () => { stream.getTracks().forEach(t => t.stop()); toast.info("Audio recorded"); };
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size < 1000) { toast.error("Recording was too short"); return; }
+        await transcribeAudio(blob);
+      };
       recorder.start(); mediaRecorderRef.current = recorder; setIsRecording(true);
+      toast.info("Recording… tap the mic again to send");
     } catch { toast.error("Microphone access denied"); }
   };
 
@@ -875,17 +1032,30 @@ Generate complete, production-ready files. Include all necessary files for the p
 
         {/* Input */}
         <div className="border-t border-border/50 p-3 glass-ultra">
-          <div className="flex gap-2 max-w-4xl mx-auto">
-            <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} accept=".txt,.js,.ts,.tsx,.jsx,.py,.json,.html,.css,.sql,.md" />
+          {attachments.length > 0 && (
+            <div className="max-w-4xl mx-auto flex flex-wrap gap-1.5 mb-2">
+              {attachments.map((a, i) => (
+                <span key={i} className="flex items-center gap-1.5 text-[10px] bg-secondary/80 border border-border/50 rounded-lg pl-2 pr-1 py-1 text-muted-foreground">
+                  {a.kind === "image" && a.dataUrl && <img src={a.dataUrl} alt={a.name} className="w-5 h-5 rounded object-cover" />}
+                  <span className="truncate max-w-[120px]">{a.name}</span>
+                  <button onClick={() => removeAttachment(i)} className="hover:text-destructive"><X size={10} /></button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2 max-w-4xl mx-auto items-end">
+            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} accept=".txt,.js,.ts,.tsx,.jsx,.py,.json,.html,.css,.sql,.md,image/*" />
             <motion.button whileHover={{ scale: 1.1 }} onClick={handleFileAttach} className="p-2.5 rounded-xl bg-secondary text-muted-foreground hover:text-foreground">
               <Paperclip size={16} />
             </motion.button>
             <div className="flex-1 relative">
-              <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleSend()}
+              <textarea ref={inputRef} rows={1} value={input} onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                 placeholder="Describe the project to build..."
-                className="w-full bg-secondary rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" disabled={isLoading} />
+                className="w-full bg-secondary rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all resize-none overflow-y-auto max-h-[200px] leading-relaxed"
+                disabled={isLoading} />
             </div>
-            <motion.button onClick={handleSend} disabled={isLoading || !input.trim()} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+            <motion.button onClick={handleSend} disabled={isLoading || (!input.trim() && attachments.length === 0)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               className="bg-primary text-primary-foreground rounded-xl px-4 py-2.5 hover:opacity-90 disabled:opacity-50 transition-all btn-hover">
               {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
             </motion.button>
@@ -1039,20 +1209,35 @@ Generate complete, production-ready files. Include all necessary files for the p
 
       {/* Input */}
       <div className="border-t border-border/50 p-3 glass-ultra">
-        <div className="flex gap-2 max-w-4xl mx-auto">
-          <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} accept=".txt,.js,.ts,.tsx,.jsx,.py,.json,.html,.css,.sql,.md,.png,.jpg,.jpeg" />
+        {attachments.length > 0 && (
+          <div className="max-w-4xl mx-auto flex flex-wrap gap-1.5 mb-2">
+            {attachments.map((a, i) => (
+              <span key={i} className="flex items-center gap-1.5 text-[10px] bg-secondary/80 border border-border/50 rounded-lg pl-2 pr-1 py-1 text-muted-foreground">
+                {a.kind === "image" && a.dataUrl && <img src={a.dataUrl} alt={a.name} className="w-5 h-5 rounded object-cover" />}
+                <span className="truncate max-w-[120px]">{a.name}</span>
+                <button onClick={() => removeAttachment(i)} className="hover:text-destructive"><X size={10} /></button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2 max-w-4xl mx-auto items-end">
+          <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} accept=".txt,.js,.ts,.tsx,.jsx,.py,.json,.html,.css,.sql,.md,image/*" />
           <motion.button whileHover={{ scale: 1.1 }} onClick={handleFileAttach} className="p-2.5 rounded-xl bg-secondary text-muted-foreground hover:text-foreground">
             <Paperclip size={16} />
           </motion.button>
-          <motion.button whileHover={{ scale: 1.1 }} onClick={toggleRecording} className={`p-2.5 rounded-xl transition-all ${isRecording ? "bg-destructive text-white animate-pulse" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
-            <Mic size={16} />
+          <motion.button whileHover={{ scale: 1.1 }} onClick={toggleRecording} disabled={transcribing}
+            title={isRecording ? "Stop & send voice note" : "Record a voice note"}
+            className={`p-2.5 rounded-xl transition-all disabled:opacity-50 ${isRecording ? "bg-destructive text-white animate-pulse" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
+            {transcribing ? <Loader2 size={16} className="animate-spin" /> : <Mic size={16} />}
           </motion.button>
           <div className="flex-1 relative">
-            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleSend()}
+            <textarea ref={inputRef} rows={1} value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
               placeholder={mode === "chat" ? "Discuss your ideas..." : mode === "image" ? "Describe the image you want to generate..." : `Describe what to create...`}
-              className="w-full bg-secondary rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" disabled={isLoading} />
+              className="w-full bg-secondary rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all resize-none overflow-y-auto max-h-[200px] leading-relaxed"
+              disabled={isLoading} />
           </div>
-          <motion.button onClick={handleSend} disabled={isLoading || !input.trim()} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+          <motion.button onClick={handleSend} disabled={isLoading || (!input.trim() && attachments.length === 0)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
             className="bg-primary text-primary-foreground rounded-xl px-4 py-2.5 hover:opacity-90 disabled:opacity-50 transition-all btn-hover">
             {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </motion.button>

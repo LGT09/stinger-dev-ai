@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, FolderKanban, Clock, Download, Trash2, Globe, Code, Edit3, ArrowRightLeft, X, GitBranch, Copy, Share2, Eye, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Plus, FolderKanban, Clock, Download, Trash2, Globe, Edit3, ArrowRightLeft, X, GitBranch, Copy, Share2, Eye, Image as ImageIcon, Loader2, Rocket, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { parseProjectFiles, downloadProjectAsZip } from "@/lib/projectFiles";
+import { deployProject } from "@/lib/deploy";
 
 const statusColor: Record<string, string> = {
   Active: "bg-accent/20 text-accent",
@@ -27,6 +28,8 @@ const Projects = () => {
   const [editLang, setEditLang] = useState("");
   const [transferProject, setTransferProject] = useState<any>(null);
   const [transferEmail, setTransferEmail] = useState("");
+  const [deployingId, setDeployingId] = useState<string | null>(null);
+  const [deployments, setDeployments] = useState<Record<string, string>>({});
 
   // Publish-to-community modal state
   const [publishProject, setPublishProject] = useState<any>(null);
@@ -49,6 +52,28 @@ const Projects = () => {
   const loadProjects = async () => {
     const { data } = await supabase.from("projects").select("*").eq("user_id", user!.id).order("updated_at", { ascending: false });
     if (data) setProjects(data);
+    const { data: deps } = await supabase.from("deployments").select("project_id, username, slug").eq("user_id", user!.id);
+    if (deps) {
+      const map: Record<string, string> = {};
+      deps.forEach(d => { if (d.project_id) map[d.project_id] = `/${d.username}/${d.slug}`; });
+      setDeployments(map);
+    }
+  };
+
+  const handleDeploy = async (p: any) => {
+    if (!user) return;
+    const username = (profile as any)?.username || user.email?.split("@")[0] || user.id.slice(0, 8);
+    setDeployingId(p.id);
+    try {
+      const res = await deployProject(p, username, user.id);
+      setDeployments(prev => ({ ...prev, [p.id]: res.path }));
+      navigator.clipboard.writeText(res.url).catch(() => {});
+      toast.success(`Live at ${res.path} — link copied`);
+    } catch (e: any) {
+      toast.error(e.message || "Deploy failed");
+    } finally {
+      setDeployingId(null);
+    }
   };
 
   const createProject = async () => {
@@ -400,6 +425,16 @@ const Projects = () => {
                 <button onClick={() => downloadZip(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-all" title="Download ZIP">
                   <Download size={14} />
                 </button>
+                <button onClick={() => handleDeploy(p)} disabled={deployingId === p.id}
+                  className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-primary transition-all disabled:opacity-50" title="Deploy as live website">
+                  {deployingId === p.id ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
+                </button>
+                {deployments[p.id] && (
+                  <a href={deployments[p.id]} target="_blank" rel="noreferrer"
+                    className="p-1.5 rounded-lg hover:bg-secondary text-primary transition-all" title={`Live at ${deployments[p.id]}`}>
+                    <ExternalLink size={14} />
+                  </a>
+                )}
                 <button onClick={() => setTransferProject(p)} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-all" title="Transfer">
                   <ArrowRightLeft size={14} />
                 </button>
