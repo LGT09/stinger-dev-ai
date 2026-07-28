@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, FolderTree, FileCode, Save, Download, Eye, Code, FolderOpen, Folder, File as FileIcon, Globe, Plus, Trash2, Smartphone, Users } from "lucide-react";
+import { ArrowLeft, FolderTree, FileCode, Save, Download, Eye, Code, FolderOpen, Folder, File as FileIcon, Globe, Plus, Trash2, Smartphone, Rocket, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { parseProjectFiles, serializeProjectFiles, buildTree, downloadProjectAsZip, isWebProject, buildPreviewHTML, type ParsedFile, type TreeNode } from "@/lib/projectFiles";
+import { deployProject, slugify } from "@/lib/deploy";
 
 const CURSOR_COLORS = ["#f59e0b", "#ec4899", "#8b5cf6", "#3b82f6", "#10b981", "#ef4444"];
 function hashStr(s: string) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
@@ -48,7 +49,10 @@ const ProjectViewer = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [participants, setParticipants] = useState<Record<string, { name: string; color: string; file?: string }>>({});
-  const [apkStatus, setApkStatus] = useState<{ status: string; apk_url?: string } | null>(null);
+  const [apkStatus, setApkStatus] = useState<{ status: string; apk_url?: string; progress?: number; stage?: string } | null>(null);
+  const [apkHistory, setApkHistory] = useState<any[]>([]);
+  const [deploying, setDeploying] = useState(false);
+  const [deployment, setDeployment] = useState<{ url: string; path: string } | null>(null);
   const channelRef = useRef<any>(null);
 
   useEffect(() => {
@@ -108,13 +112,37 @@ const ProjectViewer = () => {
   }, [activeFile?.path, user?.id, profile?.display_name]);
 
   useEffect(() => {
-    if (!apkStatus || apkStatus.status !== "pending" || !id || !user) return;
+    if (!id || !user) return;
+    (async () => {
+      const { data } = await supabase.from("apk_builds")
+        .select("id, status, apk_url, progress, stage, created_at")
+        .eq("project_id", id).eq("user_id", user.id)
+        .order("created_at", { ascending: false }).limit(10);
+      if (data) {
+        setApkHistory(data);
+        const latest = data[0];
+        if (latest) setApkStatus({ status: latest.status, apk_url: latest.apk_url || undefined, progress: latest.progress, stage: latest.stage || undefined });
+      }
+      const { data: dep } = await supabase.from("deployments")
+        .select("url, username, slug").eq("project_id", id).eq("user_id", user.id).maybeSingle();
+      if (dep) setDeployment({ url: dep.url || "", path: `/${dep.username}/${dep.slug}` });
+    })();
+  }, [id, user?.id]);
+
+  useEffect(() => {
+    if (!apkStatus || !["pending", "building"].includes(apkStatus.status) || !id || !user) return;
     const i = setInterval(async () => {
       const { data } = await supabase.from("apk_builds")
-        .select("status, apk_url").eq("project_id", id).eq("user_id", user.id)
+        .select("id, status, apk_url, progress, stage, created_at").eq("project_id", id).eq("user_id", user.id)
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
-      if (data) setApkStatus({ status: data.status, apk_url: data.apk_url || undefined });
-    }, 5000);
+      if (data) {
+        setApkStatus({ status: data.status, apk_url: data.apk_url || undefined, progress: data.progress, stage: data.stage || undefined });
+        if (data.status === "ready" || data.status === "failed") {
+          setApkHistory(prev => [data, ...prev.filter(b => b.id !== data.id)]);
+          if (data.status === "ready") toast.success("APK build ready!");
+        }
+      }
+    }, 1500);
     return () => clearInterval(i);
   }, [apkStatus?.status, id, user?.id]);
 
@@ -145,10 +173,26 @@ const ProjectViewer = () => {
 
   const requestApk = async () => {
     if (!user || !id) return;
+    setApkStatus({ status: "pending", progress: 2, stage: "Queued" });
     const { data, error } = await supabase.functions.invoke("project-export", { body: { projectId: id, format: "apk" } });
-    if (error) { toast.error(error.message); return; }
-    setApkStatus({ status: data.status });
-    toast.success(data.message || "APK build queued");
+    if (error) { toast.error(error.message); setApkStatus(null); return; }
+    setApkStatus({ status: data.status, apk_url: data.apk_url, progress: data.progress ?? 5, stage: "Queued" });
+    toast.success(data.cached ? "Existing build ready" : (data.message || "APK build started"));
+  };
+
+  const handleDeploy = async () => {
+    if (!user || !project) return;
+    const username = (profile as any)?.username || user.email?.split("@")[0] || user.id.slice(0, 8);
+    setDeploying(true);
+    try {
+      const res = await deployProject({ ...project, code_content: serializeProjectFiles(files) }, username, user.id);
+      setDeployment({ url: res.url, path: res.path });
+      toast.success("Deployed! Your site is live.");
+    } catch (e: any) {
+      toast.error(e.message || "Deploy failed");
+    } finally {
+      setDeploying(false);
+    }
   };
 
   const addFile = () => {
@@ -233,14 +277,52 @@ const ProjectViewer = () => {
                 <Smartphone size={11} /> Download APK
               </a>
             ) : (
-              <button onClick={requestApk} disabled={apkStatus?.status === "pending"}
+              <button onClick={requestApk} disabled={apkStatus?.status === "pending" || apkStatus?.status === "building"}
                 className="flex items-center gap-1 bg-accent/20 text-accent px-2.5 py-1 rounded-lg text-[11px] font-medium disabled:opacity-60">
-                <Smartphone size={11} /> {apkStatus?.status === "pending" ? "Building…" : "Build APK"}
+                <Smartphone size={11} /> {apkStatus && ["pending", "building"].includes(apkStatus.status) ? `Building ${apkStatus.progress ?? 0}%` : "Build APK"}
               </button>
             )
           )}
+          {isOwner && isWeb && (
+            deployment ? (
+              <a href={deployment.path} target="_blank" rel="noreferrer"
+                className="flex items-center gap-1 bg-primary/20 text-primary px-2.5 py-1 rounded-lg text-[11px] font-medium">
+                <ExternalLink size={11} /> View live site
+              </a>
+            ) : null
+          )}
+          {isOwner && isWeb && (
+            <button onClick={handleDeploy} disabled={deploying}
+              className="flex items-center gap-1 bg-gradient-to-r from-primary to-accent text-primary-foreground px-2.5 py-1 rounded-lg text-[11px] font-medium disabled:opacity-60 btn-hover">
+              <Rocket size={11} /> {deploying ? "Deploying…" : deployment ? "Redeploy" : "Deploy"}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* APK build progress */}
+      {isOwner && apkStatus && ["pending", "building"].includes(apkStatus.status) && (
+        <div className="px-4 py-2 border-b border-border/50 bg-secondary/30">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[11px] text-muted-foreground">{apkStatus.stage || "Building APK"}…</p>
+            <p className="text-[11px] text-primary font-medium">{apkStatus.progress ?? 0}%</p>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden">
+            <motion.div className="h-full bg-gradient-to-r from-primary to-accent"
+              animate={{ width: `${apkStatus.progress ?? 0}%` }} transition={{ ease: "easeOut", duration: 0.4 }} />
+          </div>
+        </div>
+      )}
+
+      {isOwner && deployment && (
+        <div className="px-4 py-1.5 border-b border-border/50 bg-primary/5 flex items-center gap-2">
+          <Globe size={11} className="text-primary" />
+          <p className="text-[11px] text-muted-foreground">Live at</p>
+          <a href={deployment.path} target="_blank" rel="noreferrer" className="text-[11px] text-primary font-mono truncate hover:underline">{deployment.url || deployment.path}</a>
+          <button onClick={() => { navigator.clipboard.writeText(deployment.url || `${window.location.origin}${deployment.path}`); toast.success("Link copied"); }}
+            className="ml-auto text-[10px] text-muted-foreground hover:text-primary">Copy</button>
+        </div>
+      )}
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
