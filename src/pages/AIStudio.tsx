@@ -981,17 +981,30 @@ Generate complete, production-ready files. Include all necessary files for the p
 
         {/* Input */}
         <div className="border-t border-border/50 p-3 glass-ultra">
-          <div className="flex gap-2 max-w-4xl mx-auto">
-            <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} accept=".txt,.js,.ts,.tsx,.jsx,.py,.json,.html,.css,.sql,.md" />
+          {attachments.length > 0 && (
+            <div className="max-w-4xl mx-auto flex flex-wrap gap-1.5 mb-2">
+              {attachments.map((a, i) => (
+                <span key={i} className="flex items-center gap-1.5 text-[10px] bg-secondary/80 border border-border/50 rounded-lg pl-2 pr-1 py-1 text-muted-foreground">
+                  {a.kind === "image" && a.dataUrl && <img src={a.dataUrl} alt={a.name} className="w-5 h-5 rounded object-cover" />}
+                  <span className="truncate max-w-[120px]">{a.name}</span>
+                  <button onClick={() => removeAttachment(i)} className="hover:text-destructive"><X size={10} /></button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2 max-w-4xl mx-auto items-end">
+            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} accept=".txt,.js,.ts,.tsx,.jsx,.py,.json,.html,.css,.sql,.md,image/*" />
             <motion.button whileHover={{ scale: 1.1 }} onClick={handleFileAttach} className="p-2.5 rounded-xl bg-secondary text-muted-foreground hover:text-foreground">
               <Paperclip size={16} />
             </motion.button>
             <div className="flex-1 relative">
-              <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleSend()}
+              <textarea ref={inputRef} rows={1} value={input} onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                 placeholder="Describe the project to build..."
-                className="w-full bg-secondary rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" disabled={isLoading} />
+                className="w-full bg-secondary rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all resize-none overflow-y-auto max-h-[200px] leading-relaxed"
+                disabled={isLoading} />
             </div>
-            <motion.button onClick={handleSend} disabled={isLoading || !input.trim()} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+            <motion.button onClick={handleSend} disabled={isLoading || (!input.trim() && attachments.length === 0)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               className="bg-primary text-primary-foreground rounded-xl px-4 py-2.5 hover:opacity-90 disabled:opacity-50 transition-all btn-hover">
               {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
             </motion.button>
