@@ -60,7 +60,6 @@ interface TerminalLine {
   text: string;
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 const AI_ROUTER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-router`;
 const FN_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
