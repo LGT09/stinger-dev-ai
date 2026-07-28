@@ -318,19 +318,27 @@ Generate complete, production-ready files. Include all necessary files for the p
   };
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && attachments.length === 0) || isLoading) return;
     if (!isAdmin && tokenBalance <= 0) {
       toast.error("No tokens remaining. Share your referral link or wait for monthly refill.");
       return;
     }
 
-    const userMsg: Message = { role: "user", content: input };
+    const attachedText = attachments
+      .filter(a => a.kind !== "image" && a.text)
+      .map(a => `\n\n[Attached: ${a.name}]\n${a.text}`).join("");
+    const attachedImages = attachments.filter(a => a.kind === "image" && a.dataUrl).map(a => a.dataUrl!);
+    const outgoing = `${input}${attachedText}`.trim();
+
+    const userMsg: Message = { role: "user", content: input || "(attachment)", images: attachedImages.length ? attachedImages : undefined };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput("");
+    setAttachments([]);
     setIsLoading(true);
     setShowSuggestions(false);
     setSuggestions([]);
+    void persistMessage("user", outgoing || "(attachment)");
 
     let assistantContent = "";
 
@@ -341,12 +349,34 @@ Generate complete, production-ready files. Include all necessary files for the p
       const selectedModel = getModelById(selectedModelId);
 
       // Music goes through ai-router (Suno/Mubert via davidcyril). Video stays on generate-media.
+      if (isImageGen) {
+        // Private image provider — endpoint & key live only in the edge function.
+        const resp = await fetch(`${FN_BASE}/generate-image`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
+          body: JSON.stringify({ prompt: outgoing }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.image) throw new Error(data.error || "Image generation failed");
+        assistantContent = `🖼️ Here's your image for: _${outgoing.slice(0, 120)}_`;
+        setMessages(prev => [...prev, { role: "assistant", content: assistantContent, images: [data.image] }]);
+        void persistMessage("assistant", assistantContent);
+        if (user && !isAdmin) {
+          const cost = getTokenCost(500);
+          await supabase.from("token_balances").update({ balance: Math.max(0, tokenBalance - cost) }).eq("user_id", user.id);
+          await supabase.from("token_transactions").insert({ user_id: user.id, amount: -cost, action: "image generation", description: outgoing.slice(0, 100) });
+          refreshTokens();
+        }
+        setIsLoading(false);
+        return;
+      }
+
       if (isMusicGen) {
         const musicModel = selectedModel.provider === "music" ? selectedModel.model : "suno";
         const resp = await fetch(AI_ROUTER_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
-          body: JSON.stringify({ provider: "music", model: musicModel, messages: [{ role: "user", content: input }] }),
+          body: JSON.stringify({ provider: "music", model: musicModel, messages: [{ role: "user", content: outgoing }] }),
         });
         if (!resp.ok || !resp.body) throw new Error("Music generation failed");
         const reader = resp.body.getReader();
