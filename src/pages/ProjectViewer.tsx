@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { parseProjectFiles, serializeProjectFiles, buildTree, downloadProjectAsZip, isWebProject, buildPreviewHTML, type ParsedFile, type TreeNode } from "@/lib/projectFiles";
-import { deployProject, slugify } from "@/lib/deploy";
+import { deployProject } from "@/lib/deploy";
 
 const CURSOR_COLORS = ["#f59e0b", "#ec4899", "#8b5cf6", "#3b82f6", "#10b981", "#ef4444"];
 function hashStr(s: string) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
@@ -346,6 +346,18 @@ const ProjectViewer = () => {
           {project.description && (
             <div className="p-2 border-t border-border/50">
               <p className="text-[10px] text-muted-foreground line-clamp-3">{project.description}</p>
+            </div>
+          )}
+          {isOwner && apkHistory.length > 0 && (
+            <div className="p-2 border-t border-border/50 max-h-40 overflow-y-auto">
+              <p className="text-[10px] font-medium text-foreground mb-1 flex items-center gap-1"><Smartphone size={10} className="text-accent" /> APK history</p>
+              {apkHistory.map(b => (
+                <div key={b.id} className="flex items-center gap-1.5 py-0.5">
+                  <span className={`text-[9px] px-1.5 rounded ${b.status === "ready" ? "bg-green-500/20 text-green-400" : b.status === "failed" ? "bg-destructive/20 text-destructive" : "bg-accent/20 text-accent"}`}>{b.status}</span>
+                  <span className="text-[9px] text-muted-foreground truncate">{new Date(b.created_at).toLocaleString()}</span>
+                  {b.apk_url && <a href={b.apk_url} target="_blank" rel="noreferrer" className="ml-auto text-[9px] text-primary hover:underline">get</a>}
+                </div>
+              ))}
             </div>
           )}
         </aside>
