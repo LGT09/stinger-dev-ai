@@ -28,6 +28,7 @@ import ProjectViewer from "@/pages/ProjectViewer";
 import SupabaseIntegration from "@/pages/SupabaseIntegration";
 import CodeVerseIntegration from "@/pages/CodeVerseIntegration";
 import Landing from "@/pages/Landing";
+import DeployedSite from "@/pages/DeployedSite";
 import NotFound from "@/pages/NotFound";
 import { ShieldAlert, Mail } from "lucide-react";
 
@@ -90,6 +91,7 @@ const AppContent = () => {
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/shared/:code" element={<SharedChat />} />
+          <Route path="/:username/:slug" element={<DeployedSite />} />
           <Route path="*" element={<LandingWrapper />} />
         </Routes>
         <CookieConsent />
@@ -124,6 +126,7 @@ const AppContent = () => {
           <Route path="/contact" element={<ContactSupport />} />
           <Route path="/admin" element={<AdminDashboard />} />
         </Route>
+        <Route path="/:username/:slug" element={<DeployedSite />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <CookieConsent />
