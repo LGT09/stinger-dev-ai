@@ -632,6 +632,8 @@ Generate complete, production-ready files. Include all necessary files for the p
         }
       }
 
+      if (assistantContent.trim()) void persistMessage("assistant", assistantContent);
+
       // Token deduction
       if (user && !isAdmin) {
         const cost = getTokenCost(assistantContent.length);
