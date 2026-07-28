@@ -13,7 +13,11 @@ const json = (b: unknown, s = 200) =>
  * The upstream endpoint + API key NEVER leave this function — the client only
  * ever receives a base64 data URL of the finished image.
  */
-const ENDPOINT = "https://prexzyapis.com/ai/homeplanner-image";
+const ENDPOINTS = [
+  "https://prexzyapis.com/ai/genimage",
+  "https://prexzyapis.com/ai/aiart",
+  "https://prexzyapis.com/ai/dalle",
+];
 
 function apiKey() {
   return Deno.env.get("IMAGE_GEN_API_KEY") || Deno.env.get("VIDEO_GEN_API_KEY") || "";
@@ -36,9 +40,11 @@ async function toDataUrl(res: Response): Promise<string | null> {
   try { payload = JSON.parse(text); } catch { /* not json */ }
 
   const candidate: string | undefined =
+    (Array.isArray(payload?.image_url) ? (payload.image_url[0]?.image?.url || payload.image_url[0]?.url || payload.image_url[0]) : payload?.image_url) ||
+    (Array.isArray(payload?.images) ? payload.images[0] : undefined) ||
     payload?.result?.url || payload?.result?.image || payload?.result ||
     payload?.data?.url || payload?.data?.image || payload?.image ||
-    payload?.url || payload?.image_url ||
+    payload?.url ||
     (typeof payload === "string" ? payload : undefined) ||
     (/^https?:\/\/\S+$/.test(text.trim()) ? text.trim() : undefined);
 
@@ -60,15 +66,11 @@ serve(async (req) => {
     if (!p) return json({ error: "Prompt is required" }, 400);
 
     const key = apiKey();
-    const attempts: Array<() => Promise<Response | null>> = [
-      () => fetch(`${ENDPOINT}?prompt=${encodeURIComponent(p)}&apikey=${encodeURIComponent(key)}`).catch(() => null),
-      () => fetch(`${ENDPOINT}?prompt=${encodeURIComponent(p)}&apiKey=${encodeURIComponent(key)}`).catch(() => null),
-      () => fetch(ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, "x-api-key": key },
-        body: JSON.stringify({ prompt: p, apikey: key }),
-      }).catch(() => null),
-    ];
+    const attempts = ENDPOINTS.map((url) => () =>
+      fetch(`${url}?prompt=${encodeURIComponent(p)}${key ? `&apikey=${encodeURIComponent(key)}` : ""}`, {
+        headers: key ? { Authorization: `Bearer ${key}`, "x-api-key": key } : {},
+      }).catch(() => null)
+    );
 
     for (const attempt of attempts) {
       const res = await attempt();
