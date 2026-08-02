@@ -411,7 +411,6 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
 
   const handleTerminalCommand = async (cmd: string) => {
     if (!cmd.trim()) return;
-    if (!cmd.trim()) return;
     addTerminalLine("input", `$ ${cmd}`);
     setTerminalInput("");
 
