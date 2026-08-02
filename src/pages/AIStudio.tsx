@@ -409,6 +409,97 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
     return out;
   };
 
+  // ---------- MCP servers (Code mode) ----------
+  const KNOWN_MCP: Record<string, { name: string; transport: string; url?: string }> = {
+    supabase: { name: "Supabase", transport: "stdio" },
+    github: { name: "GitHub", transport: "stdio" },
+    filesystem: { name: "Filesystem", transport: "stdio" },
+    postgres: { name: "Postgres", transport: "stdio" },
+    stripe: { name: "Stripe", transport: "stdio" },
+    slack: { name: "Slack", transport: "stdio" },
+    puppeteer: { name: "Puppeteer", transport: "stdio" },
+    memory: { name: "Memory", transport: "stdio" },
+    fetch: { name: "Fetch", transport: "stdio" },
+    stinger: { name: "Stinger", transport: "http", url: "https://stinger.co.zw/mcp" },
+  };
+
+  const loadMcpServers = async (projectId: string | null) => {
+    if (!user) return;
+    const q = supabase.from("mcp_servers").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    const { data } = projectId ? await q.eq("project_id", projectId) : await q.is("project_id", null);
+    setMcpServers(data || []);
+  };
+
+  const installMcpServer = async (raw: string) => {
+    if (!user) { toast.error("Sign in to install MCP servers"); return; }
+    const key = raw.trim().toLowerCase();
+    if (!key) return;
+    const known = KNOWN_MCP[key];
+    const pkg = known ? `@modelcontextprotocol/server-${key}` : raw.trim();
+    addTerminalLine("system", `Installing MCP server ${pkg}...`);
+    const { error } = await supabase.from("mcp_servers").insert({
+      user_id: user.id,
+      project_id: projectIdRef.current,
+      name: known?.name || raw.trim(),
+      package: pkg,
+      transport: known?.transport || (raw.startsWith("http") ? "http" : "stdio"),
+      url: known?.url || (raw.startsWith("http") ? raw.trim() : null),
+      status: "installed",
+    });
+    if (error) { addTerminalLine("error", error.message); return; }
+    addTerminalLine("output", `✓ MCP server "${known?.name || raw.trim()}" installed and connected`);
+    setShowMcp(true);
+    loadMcpServers(projectIdRef.current);
+  };
+
+  const removeMcpServer = async (id: string) => {
+    await supabase.from("mcp_servers").delete().eq("id", id);
+    loadMcpServers(projectIdRef.current);
+  };
+
+  const toggleMcpServer = async (id: string, enabled: boolean) => {
+    await supabase.from("mcp_servers").update({ enabled: !enabled }).eq("id", id);
+    loadMcpServers(projectIdRef.current);
+  };
+
+  // ---------- APK builds ----------
+  const buildApk = async () => {
+    if (!user) { toast.error("Sign in to build an APK"); return; }
+    if (!projectIdRef.current) { toast.error("Build or open a project first"); return; }
+    setApkProgress({ progress: 5, stage: "Queued" });
+    addTerminalLine("system", "📦 Starting APK build...");
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const resp = await fetch(`${FN_BASE}/project-export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess.session?.access_token}` },
+        body: JSON.stringify({ projectId: projectIdRef.current, format: "apk" }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "APK build failed");
+      if (data.apk_url) {
+        setApkProgress({ progress: 100, stage: "Ready", url: data.apk_url });
+        addTerminalLine("output", "✓ APK ready (cached build)");
+        return;
+      }
+      const buildId = data.build_id;
+      const poll = setInterval(async () => {
+        const { data: b } = await supabase.from("apk_builds").select("progress, stage, status, apk_url").eq("id", buildId).maybeSingle();
+        if (!b) return;
+        setApkProgress({ progress: b.progress ?? 0, stage: b.stage || b.status, url: b.apk_url || undefined });
+        if (b.status === "ready" || b.status === "failed") {
+          clearInterval(poll);
+          addTerminalLine(b.status === "ready" ? "output" : "error", b.status === "ready" ? "✓ APK build complete" : "APK build failed");
+          if (b.status === "ready") toast.success("APK ready to download");
+        }
+      }, 900);
+    } catch (e: any) {
+      setApkProgress(null);
+      addTerminalLine("error", e.message || "APK build failed");
+      toast.error(e.message || "APK build failed");
+    }
+  };
+
   const handleTerminalCommand = async (cmd: string) => {
     if (!cmd.trim()) return;
     addTerminalLine("input", `$ ${cmd}`);
@@ -432,7 +523,26 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
     } else if (c === "clear") {
       setTerminalLines([{ type: "system", text: "Terminal cleared." }]);
     } else if (c === "help") {
-      addTerminalLine("output", "Commands: ls, cat <file>, npm install <pkg>, image <prompt>, clear, help, build, deploy");
+      addTerminalLine("output", "Commands: ls, cat <file>, npm install <pkg>, image <prompt>, mcp install <name>, mcp list, mcp remove <name>, apk, clear, help, build, deploy");
+    } else if (c.startsWith("mcp")) {
+      const parts = cmd.trim().split(/\s+/).slice(1);
+      const sub = (parts[0] || "list").toLowerCase();
+      if (sub === "install" || sub === "add") {
+        await installMcpServer(parts.slice(1).join(" "));
+      } else if (sub === "remove" || sub === "uninstall") {
+        const target = parts.slice(1).join(" ").toLowerCase();
+        const hit = mcpServers.find(m => m.name.toLowerCase() === target || m.package.toLowerCase().includes(target));
+        if (!hit) addTerminalLine("error", `MCP server not found: ${target}`);
+        else { await removeMcpServer(hit.id); addTerminalLine("output", `✓ Removed ${hit.name}`); }
+      } else if (sub === "available") {
+        addTerminalLine("output", Object.keys(KNOWN_MCP).join(", "));
+      } else {
+        addTerminalLine("output", mcpServers.length
+          ? mcpServers.map(m => `${m.enabled ? "●" : "○"} ${m.name} — ${m.package} (${m.transport})`).join("\n  ")
+          : "No MCP servers installed. Try: mcp available");
+      }
+    } else if (c === "apk" || c.startsWith("build apk")) {
+      await buildApk();
     } else if (c.startsWith("image ")) {
       const p = cmd.slice(6).trim();
       addTerminalLine("system", `🎨 Generating image: ${p}`);
