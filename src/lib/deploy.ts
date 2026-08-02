@@ -10,7 +10,7 @@ export const slugify = (s: string) =>
 export const STINGER_BADGE = `
 <div id="stinger-badge" style="position:fixed;right:18px;bottom:18px;z-index:2147483000;font-family:system-ui,sans-serif">
   <div id="stinger-badge-card" style="display:none;margin-bottom:10px;max-width:250px;background:rgba(15,18,22,.94);color:#e7eaf0;border:1px solid rgba(255,212,0,.35);border-radius:14px;padding:12px 14px;font-size:12px;line-height:1.5;box-shadow:0 12px 40px rgba(0,0,0,.45);backdrop-filter:blur(12px)">
-    This software was built in <strong style="color:#ffd400">stinger.co.zw</strong> — build your webs and apps there.
+    This software was created in <strong style="color:#ffd400">stinger.co.zw</strong>, Created your own software and apps in stinger.co.zw.
     <a href="https://stinger.co.zw" target="_blank" rel="noopener" style="display:block;margin-top:8px;text-align:center;background:#ffd400;color:#0f1216;font-weight:700;border-radius:8px;padding:6px 10px;text-decoration:none">Start building free</a>
   </div>
   <button id="stinger-badge-btn" aria-label="Built in Stinger AI Dev"
