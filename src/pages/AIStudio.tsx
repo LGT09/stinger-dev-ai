@@ -820,19 +820,36 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
             content: `✅ **Project built!** ${result.files.length} files generated. Check the file explorer and terminal below.`,
           }]);
 
-          // Auto-save project
+          // Auto-save project — the SAME project keeps being updated for every
+          // follow-up prompt in this conversation.
           if (user) {
-            const projectName = `AI ${codeTool} - ${new Date().toLocaleDateString()}`;
             const codeContent = result.files.map(f => `// === ${f.path} ===\n${f.content}`).join("\n\n");
-            await supabase.from("projects").insert({
-              user_id: user.id, name: projectName,
-              description: input.slice(0, 200),
-              code_content: codeContent,
-              language: codeTool === "database" ? "SQL" : "React",
-              status: "Active",
-            });
-            addTerminalLine("output", "✓ Project auto-saved");
-            toast.success("Project auto-saved!");
+            if (projectIdRef.current) {
+              await supabase.from("projects").update({
+                code_content: codeContent,
+                language: codeTool === "database" ? "SQL" : "React",
+              }).eq("id", projectIdRef.current);
+              addTerminalLine("output", `✓ Updated project "${activeProjectName || "project"}"`);
+              toast.success("Project updated");
+            } else {
+              const projectName = await deriveTitle(outgoing, "project");
+              const { data: created } = await supabase.from("projects").insert({
+                user_id: user.id, name: projectName,
+                description: input.slice(0, 200),
+                code_content: codeContent,
+                language: codeTool === "database" ? "SQL" : "React",
+                status: "Active",
+                thread_id: threadRef.current,
+              }).select("id, name").single();
+              if (created) {
+                projectIdRef.current = created.id;
+                setActiveProjectId(created.id);
+                setActiveProjectName(created.name);
+                loadMcpServers(created.id);
+              }
+              addTerminalLine("output", `✓ Project "${projectName}" created and saved`);
+              toast.success(`Project "${projectName}" saved`);
+            }
           }
         } else {
           // Fallback if parsing failed
