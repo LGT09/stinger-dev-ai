@@ -181,6 +181,9 @@ const AdminDashboard = () => {
         ))}
       </div>
 
+      {/* Communications */}
+      <AdminComms />
+
       {/* Token Pricing */}
       <div className="glass rounded-xl p-4">
         <p className="text-xs font-medium text-foreground mb-3">Token Pricing</p>
