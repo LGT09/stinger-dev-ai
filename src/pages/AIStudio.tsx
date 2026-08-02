@@ -152,14 +152,78 @@ const AIStudio = () => {
 
   useEffect(() => { loadThreads(); }, [loadThreads]);
 
+  /**
+   * Ask the AI for a short, human title for a prompt. Falls back to a cleaned-up
+   * slice of the prompt if the router is unavailable.
+   */
+  const deriveTitle = async (prompt: string, kind: "chat" | "project"): Promise<string> => {
+    const fallback = prompt.replace(/\s+/g, " ").trim().slice(0, 48) || (kind === "project" ? "Untitled project" : "New chat");
+    try {
+      const resp = await fetch(AI_ROUTER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
+        body: JSON.stringify({
+          provider: "hostify", model: "auto", mode: "chat",
+          messages: [
+            { role: "system", content: `Return ONLY a short ${kind === "project" ? "product/project" : "conversation"} name (2-5 words, Title Case, no quotes, no punctuation at the end) that summarises the user's request.` },
+            { role: "user", content: prompt.slice(0, 600) },
+          ],
+        }),
+      });
+      if (!resp.ok || !resp.body) return fallback;
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let raw = "";
+      let out = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        raw += decoder.decode(value, { stream: true });
+        const lines = raw.split("\n");
+        raw = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const j = line.slice(6).trim();
+          if (j === "[DONE]") continue;
+          try { out += JSON.parse(j).choices?.[0]?.delta?.content || ""; } catch { /* ignore */ }
+        }
+      }
+      const title = out.replace(/["'`*#\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 48);
+      return title.length >= 3 ? title : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
   const ensureThread = async (firstMessage: string): Promise<string | null> => {
     if (!user) return null;
     if (threadRef.current) return threadRef.current;
-    const { data } = await supabase.from("chat_threads")
-      .insert({ user_id: user.id, title: firstMessage.slice(0, 60) || "New chat", mode })
-      .select("id").single();
-    threadRef.current = data?.id || null;
-    return threadRef.current;
+    // Guard against two concurrent persists creating two threads.
+    if (threadPromiseRef.current) return threadPromiseRef.current;
+    threadPromiseRef.current = (async () => {
+      const title = await deriveTitle(firstMessage, "chat");
+      const { data } = await supabase.from("chat_threads")
+        .insert({ user_id: user.id, title, mode })
+        .select("id").single();
+      threadRef.current = data?.id || null;
+      return threadRef.current;
+    })();
+    const id = await threadPromiseRef.current;
+    threadPromiseRef.current = null;
+    return id;
+  };
+
+  /** Deduct tokens using a fresh read so the balance never drifts / stalls. */
+  const spendTokens = async (cost: number, action: string, description: string) => {
+    if (!user || isAdmin || cost <= 0) return;
+    const { data: row } = await supabase.from("token_balances").select("balance").eq("user_id", user.id).maybeSingle();
+    const current = row?.balance ?? 0;
+    const next = Math.max(0, current - cost);
+    await supabase.from("token_balances").update({ balance: next }).eq("user_id", user.id);
+    await supabase.from("token_transactions").insert({
+      user_id: user.id, amount: -cost, action, description: description.slice(0, 100),
+    });
+    refreshTokens();
   };
 
   const persistMessage = async (role: "user" | "assistant", content: string) => {
@@ -173,6 +237,12 @@ const AIStudio = () => {
 
   const startNewChat = () => {
     threadRef.current = null;
+    threadPromiseRef.current = null;
+    projectIdRef.current = null;
+    setActiveProjectId(null);
+    setActiveProjectName("");
+    setMcpServers([]);
+    setApkProgress(null);
     setMessages([{ role: "assistant", content: "New conversation started. I'm **Stinger AI** by Vincent Ganiza (Traxxion Tech). How can I help you?" }]);
     setSuggestions([]);
     setShowSuggestions(false);
@@ -187,9 +257,17 @@ const AIStudio = () => {
     setShowHistory(false);
     if (!user) { setMessages(session.messages); return; }
     threadRef.current = session.id;
+    threadPromiseRef.current = null;
     const { data } = await supabase.from("chat_messages")
       .select("role, content").eq("thread_id", session.id).order("created_at", { ascending: true });
     setMessages((data || []).map(m => ({ role: m.role as "user" | "assistant", content: m.content })));
+    // Re-bind the project that belongs to this conversation, if any.
+    const { data: proj } = await supabase.from("projects")
+      .select("id, name").eq("thread_id", session.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    projectIdRef.current = proj?.id ?? null;
+    setActiveProjectId(proj?.id ?? null);
+    setActiveProjectName(proj?.name ?? "");
+    if (proj?.id) loadMcpServers(proj.id);
   };
 
   const getTokenCost = (responseLength: number): number => {
