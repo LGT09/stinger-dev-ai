@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      announcements: {
+        Row: {
+          audience: string
+          body: string
+          created_at: string
+          created_by: string | null
+          id: string
+          published: boolean
+          recipients_count: number
+          send_email: boolean
+          sent_at: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          audience?: string
+          body: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          published?: boolean
+          recipients_count?: number
+          send_email?: boolean
+          sent_at?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          audience?: string
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          published?: boolean
+          recipients_count?: number
+          send_email?: boolean
+          sent_at?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       apk_builds: {
         Row: {
           apk_url: string | null
@@ -179,6 +221,155 @@ export type Database = {
           },
         ]
       }
+      email_logs: {
+        Row: {
+          announcement_id: string | null
+          created_at: string
+          error: string | null
+          event_id: string | null
+          id: string
+          kind: string
+          recipient: string
+          status: string
+          subject: string
+        }
+        Insert: {
+          announcement_id?: string | null
+          created_at?: string
+          error?: string | null
+          event_id?: string | null
+          id?: string
+          kind?: string
+          recipient: string
+          status?: string
+          subject: string
+        }
+        Update: {
+          announcement_id?: string | null
+          created_at?: string
+          error?: string | null
+          event_id?: string | null
+          id?: string
+          kind?: string
+          recipient?: string
+          status?: string
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_logs_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_logs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          broadcast_at: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          ends_at: string | null
+          id: string
+          kind: string
+          promo_code: string | null
+          published: boolean
+          starts_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          broadcast_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          ends_at?: string | null
+          id?: string
+          kind?: string
+          promo_code?: string | null
+          published?: boolean
+          starts_at?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          broadcast_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          ends_at?: string | null
+          id?: string
+          kind?: string
+          promo_code?: string | null
+          published?: boolean
+          starts_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      mcp_servers: {
+        Row: {
+          config: Json
+          created_at: string
+          enabled: boolean
+          id: string
+          name: string
+          package: string
+          project_id: string | null
+          status: string
+          transport: string
+          updated_at: string
+          url: string | null
+          user_id: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          name: string
+          package: string
+          project_id?: string | null
+          status?: string
+          transport?: string
+          updated_at?: string
+          url?: string | null
+          user_id: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          name?: string
+          package?: string
+          project_id?: string | null
+          status?: string
+          transport?: string
+          updated_at?: string
+          url?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mcp_servers_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -248,6 +439,7 @@ export type Database = {
           likes: number
           name: string
           status: string
+          thread_id: string | null
           updated_at: string
           user_id: string
           views: number
@@ -263,6 +455,7 @@ export type Database = {
           likes?: number
           name: string
           status?: string
+          thread_id?: string | null
           updated_at?: string
           user_id: string
           views?: number
@@ -278,6 +471,7 @@ export type Database = {
           likes?: number
           name?: string
           status?: string
+          thread_id?: string | null
           updated_at?: string
           user_id?: string
           views?: number

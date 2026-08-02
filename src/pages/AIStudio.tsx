@@ -96,6 +96,16 @@ const AIStudio = () => {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [transcribing, setTranscribing] = useState(false);
+  // Active project bound to the current chat thread (so follow-up prompts keep
+  // building the SAME project instead of spawning a new one every message).
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProjectName, setActiveProjectName] = useState<string>("");
+  // MCP servers installed into the current project
+  const [mcpServers, setMcpServers] = useState<any[]>([]);
+  const [showMcp, setShowMcp] = useState(false);
+  const [mcpInput, setMcpInput] = useState("");
+  // APK build
+  const [apkProgress, setApkProgress] = useState<{ progress: number; stage: string; url?: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -103,6 +113,8 @@ const AIStudio = () => {
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<string | null>(null);
+  const projectIdRef = useRef<string | null>(null);
+  const threadPromiseRef = useRef<Promise<string | null> | null>(null);
 
   // Auto-grow the composer downwards (never sideways) with an internal scrollbar.
   useEffect(() => {
@@ -140,14 +152,78 @@ const AIStudio = () => {
 
   useEffect(() => { loadThreads(); }, [loadThreads]);
 
+  /**
+   * Ask the AI for a short, human title for a prompt. Falls back to a cleaned-up
+   * slice of the prompt if the router is unavailable.
+   */
+  const deriveTitle = async (prompt: string, kind: "chat" | "project"): Promise<string> => {
+    const fallback = prompt.replace(/\s+/g, " ").trim().slice(0, 48) || (kind === "project" ? "Untitled project" : "New chat");
+    try {
+      const resp = await fetch(AI_ROUTER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
+        body: JSON.stringify({
+          provider: "hostify", model: "auto", mode: "chat",
+          messages: [
+            { role: "system", content: `Return ONLY a short ${kind === "project" ? "product/project" : "conversation"} name (2-5 words, Title Case, no quotes, no punctuation at the end) that summarises the user's request.` },
+            { role: "user", content: prompt.slice(0, 600) },
+          ],
+        }),
+      });
+      if (!resp.ok || !resp.body) return fallback;
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let raw = "";
+      let out = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        raw += decoder.decode(value, { stream: true });
+        const lines = raw.split("\n");
+        raw = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const j = line.slice(6).trim();
+          if (j === "[DONE]") continue;
+          try { out += JSON.parse(j).choices?.[0]?.delta?.content || ""; } catch { /* ignore */ }
+        }
+      }
+      const title = out.replace(/["'`*#\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 48);
+      return title.length >= 3 ? title : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
   const ensureThread = async (firstMessage: string): Promise<string | null> => {
     if (!user) return null;
     if (threadRef.current) return threadRef.current;
-    const { data } = await supabase.from("chat_threads")
-      .insert({ user_id: user.id, title: firstMessage.slice(0, 60) || "New chat", mode })
-      .select("id").single();
-    threadRef.current = data?.id || null;
-    return threadRef.current;
+    // Guard against two concurrent persists creating two threads.
+    if (threadPromiseRef.current) return threadPromiseRef.current;
+    threadPromiseRef.current = (async () => {
+      const title = await deriveTitle(firstMessage, "chat");
+      const { data } = await supabase.from("chat_threads")
+        .insert({ user_id: user.id, title, mode })
+        .select("id").single();
+      threadRef.current = data?.id || null;
+      return threadRef.current;
+    })();
+    const id = await threadPromiseRef.current;
+    threadPromiseRef.current = null;
+    return id;
+  };
+
+  /** Deduct tokens using a fresh read so the balance never drifts / stalls. */
+  const spendTokens = async (cost: number, action: string, description: string) => {
+    if (!user || isAdmin || cost <= 0) return;
+    const { data: row } = await supabase.from("token_balances").select("balance").eq("user_id", user.id).maybeSingle();
+    const current = row?.balance ?? 0;
+    const next = Math.max(0, current - cost);
+    await supabase.from("token_balances").update({ balance: next }).eq("user_id", user.id);
+    await supabase.from("token_transactions").insert({
+      user_id: user.id, amount: -cost, action, description: description.slice(0, 100),
+    });
+    refreshTokens();
   };
 
   const persistMessage = async (role: "user" | "assistant", content: string) => {
@@ -161,6 +237,12 @@ const AIStudio = () => {
 
   const startNewChat = () => {
     threadRef.current = null;
+    threadPromiseRef.current = null;
+    projectIdRef.current = null;
+    setActiveProjectId(null);
+    setActiveProjectName("");
+    setMcpServers([]);
+    setApkProgress(null);
     setMessages([{ role: "assistant", content: "New conversation started. I'm **Stinger AI** by Vincent Ganiza (Traxxion Tech). How can I help you?" }]);
     setSuggestions([]);
     setShowSuggestions(false);
@@ -175,9 +257,17 @@ const AIStudio = () => {
     setShowHistory(false);
     if (!user) { setMessages(session.messages); return; }
     threadRef.current = session.id;
+    threadPromiseRef.current = null;
     const { data } = await supabase.from("chat_messages")
       .select("role, content").eq("thread_id", session.id).order("created_at", { ascending: true });
     setMessages((data || []).map(m => ({ role: m.role as "user" | "assistant", content: m.content })));
+    // Re-bind the project that belongs to this conversation, if any.
+    const { data: proj } = await supabase.from("projects")
+      .select("id, name").eq("thread_id", session.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    projectIdRef.current = proj?.id ?? null;
+    setActiveProjectId(proj?.id ?? null);
+    setActiveProjectName(proj?.name ?? "");
+    if (proj?.id) loadMcpServers(proj.id);
   };
 
   const getTokenCost = (responseLength: number): number => {
@@ -319,6 +409,97 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
     return out;
   };
 
+  // ---------- MCP servers (Code mode) ----------
+  const KNOWN_MCP: Record<string, { name: string; transport: string; url?: string }> = {
+    supabase: { name: "Supabase", transport: "stdio" },
+    github: { name: "GitHub", transport: "stdio" },
+    filesystem: { name: "Filesystem", transport: "stdio" },
+    postgres: { name: "Postgres", transport: "stdio" },
+    stripe: { name: "Stripe", transport: "stdio" },
+    slack: { name: "Slack", transport: "stdio" },
+    puppeteer: { name: "Puppeteer", transport: "stdio" },
+    memory: { name: "Memory", transport: "stdio" },
+    fetch: { name: "Fetch", transport: "stdio" },
+    stinger: { name: "Stinger", transport: "http", url: "https://stinger.co.zw/mcp" },
+  };
+
+  const loadMcpServers = async (projectId: string | null) => {
+    if (!user) return;
+    const q = supabase.from("mcp_servers").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    const { data } = projectId ? await q.eq("project_id", projectId) : await q.is("project_id", null);
+    setMcpServers(data || []);
+  };
+
+  const installMcpServer = async (raw: string) => {
+    if (!user) { toast.error("Sign in to install MCP servers"); return; }
+    const key = raw.trim().toLowerCase();
+    if (!key) return;
+    const known = KNOWN_MCP[key];
+    const pkg = known ? `@modelcontextprotocol/server-${key}` : raw.trim();
+    addTerminalLine("system", `Installing MCP server ${pkg}...`);
+    const { error } = await supabase.from("mcp_servers").insert({
+      user_id: user.id,
+      project_id: projectIdRef.current,
+      name: known?.name || raw.trim(),
+      package: pkg,
+      transport: known?.transport || (raw.startsWith("http") ? "http" : "stdio"),
+      url: known?.url || (raw.startsWith("http") ? raw.trim() : null),
+      status: "installed",
+    });
+    if (error) { addTerminalLine("error", error.message); return; }
+    addTerminalLine("output", `✓ MCP server "${known?.name || raw.trim()}" installed and connected`);
+    setShowMcp(true);
+    loadMcpServers(projectIdRef.current);
+  };
+
+  const removeMcpServer = async (id: string) => {
+    await supabase.from("mcp_servers").delete().eq("id", id);
+    loadMcpServers(projectIdRef.current);
+  };
+
+  const toggleMcpServer = async (id: string, enabled: boolean) => {
+    await supabase.from("mcp_servers").update({ enabled: !enabled }).eq("id", id);
+    loadMcpServers(projectIdRef.current);
+  };
+
+  // ---------- APK builds ----------
+  const buildApk = async () => {
+    if (!user) { toast.error("Sign in to build an APK"); return; }
+    if (!projectIdRef.current) { toast.error("Build or open a project first"); return; }
+    setApkProgress({ progress: 5, stage: "Queued" });
+    addTerminalLine("system", "📦 Starting APK build...");
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const resp = await fetch(`${FN_BASE}/project-export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess.session?.access_token}` },
+        body: JSON.stringify({ projectId: projectIdRef.current, format: "apk" }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "APK build failed");
+      if (data.apk_url) {
+        setApkProgress({ progress: 100, stage: "Ready", url: data.apk_url });
+        addTerminalLine("output", "✓ APK ready (cached build)");
+        return;
+      }
+      const buildId = data.build_id;
+      const poll = setInterval(async () => {
+        const { data: b } = await supabase.from("apk_builds").select("progress, stage, status, apk_url").eq("id", buildId).maybeSingle();
+        if (!b) return;
+        setApkProgress({ progress: b.progress ?? 0, stage: b.stage || b.status, url: b.apk_url || undefined });
+        if (b.status === "ready" || b.status === "failed") {
+          clearInterval(poll);
+          addTerminalLine(b.status === "ready" ? "output" : "error", b.status === "ready" ? "✓ APK build complete" : "APK build failed");
+          if (b.status === "ready") toast.success("APK ready to download");
+        }
+      }, 900);
+    } catch (e: any) {
+      setApkProgress(null);
+      addTerminalLine("error", e.message || "APK build failed");
+      toast.error(e.message || "APK build failed");
+    }
+  };
+
   const handleTerminalCommand = async (cmd: string) => {
     if (!cmd.trim()) return;
     addTerminalLine("input", `$ ${cmd}`);
@@ -342,7 +523,26 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
     } else if (c === "clear") {
       setTerminalLines([{ type: "system", text: "Terminal cleared." }]);
     } else if (c === "help") {
-      addTerminalLine("output", "Commands: ls, cat <file>, npm install <pkg>, image <prompt>, clear, help, build, deploy");
+      addTerminalLine("output", "Commands: ls, cat <file>, npm install <pkg>, image <prompt>, mcp install <name>, mcp list, mcp remove <name>, apk, clear, help, build, deploy");
+    } else if (c.startsWith("mcp")) {
+      const parts = cmd.trim().split(/\s+/).slice(1);
+      const sub = (parts[0] || "list").toLowerCase();
+      if (sub === "install" || sub === "add") {
+        await installMcpServer(parts.slice(1).join(" "));
+      } else if (sub === "remove" || sub === "uninstall") {
+        const target = parts.slice(1).join(" ").toLowerCase();
+        const hit = mcpServers.find(m => m.name.toLowerCase() === target || m.package.toLowerCase().includes(target));
+        if (!hit) addTerminalLine("error", `MCP server not found: ${target}`);
+        else { await removeMcpServer(hit.id); addTerminalLine("output", `✓ Removed ${hit.name}`); }
+      } else if (sub === "available") {
+        addTerminalLine("output", Object.keys(KNOWN_MCP).join(", "));
+      } else {
+        addTerminalLine("output", mcpServers.length
+          ? mcpServers.map(m => `${m.enabled ? "●" : "○"} ${m.name} — ${m.package} (${m.transport})`).join("\n  ")
+          : "No MCP servers installed. Try: mcp available");
+      }
+    } else if (c === "apk" || c.startsWith("build apk")) {
+      await buildApk();
     } else if (c.startsWith("image ")) {
       const p = cmd.slice(6).trim();
       addTerminalLine("system", `🎨 Generating image: ${p}`);
@@ -410,12 +610,7 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
         assistantContent = `🖼️ Here's your image for: _${outgoing.slice(0, 120)}_`;
         setMessages(prev => [...prev, { role: "assistant", content: assistantContent, images: [data.image] }]);
         void persistMessage("assistant", assistantContent);
-        if (user && !isAdmin) {
-          const cost = getTokenCost(500);
-          await supabase.from("token_balances").update({ balance: Math.max(0, tokenBalance - cost) }).eq("user_id", user.id);
-          await supabase.from("token_transactions").insert({ user_id: user.id, amount: -cost, action: "image generation", description: outgoing.slice(0, 100) });
-          refreshTokens();
-        }
+        await spendTokens(getTokenCost(500), "image generation", outgoing);
         setIsLoading(false);
         return;
       }
@@ -456,12 +651,7 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
             } catch {}
           }
         }
-        if (user && !isAdmin) {
-          const cost = getTokenCost(assistantContent.length);
-          await supabase.from("token_balances").update({ balance: Math.max(0, tokenBalance - cost) }).eq("user_id", user.id);
-          await supabase.from("token_transactions").insert({ user_id: user.id, amount: -cost, action: "music generation", description: input.slice(0, 100) });
-          refreshTokens();
-        }
+        await spendTokens(getTokenCost(assistantContent.length), "music generation", input);
         setIsLoading(false);
         return;
       }
@@ -498,15 +688,8 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
         }
         assistantContent = lines.join("\n");
         setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
-        // Token deduction (skip for admins)
-        if (user && !isAdmin) {
-          const cost = getTokenCost(assistantContent.length);
-          await supabase.from("token_balances").update({ balance: Math.max(0, tokenBalance - cost) }).eq("user_id", user.id);
-          await supabase.from("token_transactions").insert({
-            user_id: user.id, amount: -cost, action: `${mode} generation`, description: input.slice(0, 100),
-          });
-          refreshTokens();
-        }
+        // Token deduction (skipped for admins inside spendTokens)
+        await spendTokens(getTokenCost(assistantContent.length), `${mode} generation`, input);
         setIsLoading(false);
         return;
       }
@@ -620,19 +803,36 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
             content: `✅ **Project built!** ${result.files.length} files generated. Check the file explorer and terminal below.`,
           }]);
 
-          // Auto-save project
+          // Auto-save project — the SAME project keeps being updated for every
+          // follow-up prompt in this conversation.
           if (user) {
-            const projectName = `AI ${codeTool} - ${new Date().toLocaleDateString()}`;
             const codeContent = result.files.map(f => `// === ${f.path} ===\n${f.content}`).join("\n\n");
-            await supabase.from("projects").insert({
-              user_id: user.id, name: projectName,
-              description: input.slice(0, 200),
-              code_content: codeContent,
-              language: codeTool === "database" ? "SQL" : "React",
-              status: "Active",
-            });
-            addTerminalLine("output", "✓ Project auto-saved");
-            toast.success("Project auto-saved!");
+            if (projectIdRef.current) {
+              await supabase.from("projects").update({
+                code_content: codeContent,
+                language: codeTool === "database" ? "SQL" : "React",
+              }).eq("id", projectIdRef.current);
+              addTerminalLine("output", `✓ Updated project "${activeProjectName || "project"}"`);
+              toast.success("Project updated");
+            } else {
+              const projectName = await deriveTitle(outgoing, "project");
+              const { data: created } = await supabase.from("projects").insert({
+                user_id: user.id, name: projectName,
+                description: input.slice(0, 200),
+                code_content: codeContent,
+                language: codeTool === "database" ? "SQL" : "React",
+                status: "Active",
+                thread_id: threadRef.current,
+              }).select("id, name").single();
+              if (created) {
+                projectIdRef.current = created.id;
+                setActiveProjectId(created.id);
+                setActiveProjectName(created.name);
+                loadMcpServers(created.id);
+              }
+              addTerminalLine("output", `✓ Project "${projectName}" created and saved`);
+              toast.success(`Project "${projectName}" saved`);
+            }
           }
         } else {
           // Fallback if parsing failed
@@ -685,16 +885,11 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
       if (assistantContent.trim()) void persistMessage("assistant", assistantContent);
 
       // Token deduction
-      if (user && !isAdmin) {
-        const cost = getTokenCost(assistantContent.length);
-        await supabase.from("token_balances").update({ balance: Math.max(0, tokenBalance - cost) }).eq("user_id", user.id);
-        await supabase.from("token_transactions").insert({
-          user_id: user.id, amount: -cost,
-          action: `${mode}${mode === "code" ? ` (${codeTool})` : ""} generation`,
-          description: input.slice(0, 100),
-        });
-        refreshTokens();
-      }
+      await spendTokens(
+        getTokenCost(assistantContent.length),
+        `${mode}${mode === "code" ? ` (${codeTool})` : ""} generation`,
+        input,
+      );
     } catch (err: any) {
       toast.error(err.message || "Failed to get response");
       setMessages(prev => [...prev, { role: "assistant", content: "Sorry, an error occurred. Please try again." }]);
@@ -931,6 +1126,59 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
                       <span className="truncate">{f.path}</span>
                     </button>
                   ))
+                )}
+              </div>
+
+              {/* MCP servers */}
+              <div className="border-t border-border/50">
+                <button onClick={() => setShowMcp(v => !v)}
+                  className="w-full flex items-center gap-1.5 px-2 py-2 text-[11px] font-medium text-foreground hover:bg-secondary/50 transition-colors">
+                  {showMcp ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                  <Cpu size={11} className="text-primary" /> MCP servers
+                  <span className="ml-auto text-[10px] text-muted-foreground">{mcpServers.length}</span>
+                </button>
+                {showMcp && (
+                  <div className="p-2 pt-0 space-y-1">
+                    <div className="flex gap-1">
+                      <input value={mcpInput} onChange={e => setMcpInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter" && mcpInput.trim()) { installMcpServer(mcpInput); setMcpInput(""); } }}
+                        placeholder="supabase, github, url…"
+                        className="flex-1 min-w-0 bg-secondary/50 rounded px-2 py-1 text-[10px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40" />
+                      <button onClick={() => { if (mcpInput.trim()) { installMcpServer(mcpInput); setMcpInput(""); } }}
+                        className="px-2 rounded bg-primary/15 text-primary text-[10px] font-medium btn-hover">Add</button>
+                    </div>
+                    {mcpServers.length === 0 ? (
+                      <p className="text-[10px] text-muted-foreground py-1">None installed. Try <code className="text-primary">supabase</code>.</p>
+                    ) : mcpServers.map(m => (
+                      <div key={m.id} className="flex items-center gap-1 rounded px-1.5 py-1 bg-secondary/40 group">
+                        <button onClick={() => toggleMcpServer(m.id, m.enabled)}
+                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.enabled === false ? "bg-muted-foreground" : "bg-green-400"}`} />
+                        <span className="truncate text-[10px] text-foreground">{m.name}</span>
+                        <button onClick={() => removeMcpServer(m.id)} className="ml-auto opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive">
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* APK build */}
+              <div className="border-t border-border/50 p-2 space-y-1.5">
+                <button onClick={buildApk} disabled={!!apkProgress && apkProgress.progress < 100}
+                  className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-primary/15 text-primary text-[11px] font-medium btn-hover disabled:opacity-50">
+                  <Play size={10} /> Build APK
+                </button>
+                {apkProgress && (
+                  <div className="space-y-1">
+                    <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                      <div className="h-full bg-primary transition-all duration-500" style={{ width: `${apkProgress.progress}%` }} />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">{apkProgress.stage} · {apkProgress.progress}%</p>
+                    {apkProgress.url && (
+                      <a href={apkProgress.url} download className="block text-center text-[10px] text-primary underline">Download APK</a>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

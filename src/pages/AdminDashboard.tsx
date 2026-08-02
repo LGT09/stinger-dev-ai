@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Shield, Users, Zap, DollarSign, Search, Plus, Minus, Ban, AlertTriangle, Check, X, RefreshCw, Globe, Monitor, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import AdminComms from "@/components/AdminComms";
 import { toast } from "sonner";
 
 interface UserRow {
@@ -180,6 +181,9 @@ const AdminDashboard = () => {
           </motion.div>
         ))}
       </div>
+
+      {/* Communications */}
+      <AdminComms />
 
       {/* Token Pricing */}
       <div className="glass rounded-xl p-4">
