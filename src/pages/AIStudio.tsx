@@ -610,12 +610,7 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
         assistantContent = `🖼️ Here's your image for: _${outgoing.slice(0, 120)}_`;
         setMessages(prev => [...prev, { role: "assistant", content: assistantContent, images: [data.image] }]);
         void persistMessage("assistant", assistantContent);
-        if (user && !isAdmin) {
-          const cost = getTokenCost(500);
-          await supabase.from("token_balances").update({ balance: Math.max(0, tokenBalance - cost) }).eq("user_id", user.id);
-          await supabase.from("token_transactions").insert({ user_id: user.id, amount: -cost, action: "image generation", description: outgoing.slice(0, 100) });
-          refreshTokens();
-        }
+        await spendTokens(getTokenCost(500), "image generation", outgoing);
         setIsLoading(false);
         return;
       }
@@ -698,15 +693,8 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
         }
         assistantContent = lines.join("\n");
         setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
-        // Token deduction (skip for admins)
-        if (user && !isAdmin) {
-          const cost = getTokenCost(assistantContent.length);
-          await supabase.from("token_balances").update({ balance: Math.max(0, tokenBalance - cost) }).eq("user_id", user.id);
-          await supabase.from("token_transactions").insert({
-            user_id: user.id, amount: -cost, action: `${mode} generation`, description: input.slice(0, 100),
-          });
-          refreshTokens();
-        }
+        // Token deduction (skipped for admins inside spendTokens)
+        await spendTokens(getTokenCost(assistantContent.length), `${mode} generation`, input);
         setIsLoading(false);
         return;
       }
@@ -902,16 +890,11 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
       if (assistantContent.trim()) void persistMessage("assistant", assistantContent);
 
       // Token deduction
-      if (user && !isAdmin) {
-        const cost = getTokenCost(assistantContent.length);
-        await supabase.from("token_balances").update({ balance: Math.max(0, tokenBalance - cost) }).eq("user_id", user.id);
-        await supabase.from("token_transactions").insert({
-          user_id: user.id, amount: -cost,
-          action: `${mode}${mode === "code" ? ` (${codeTool})` : ""} generation`,
-          description: input.slice(0, 100),
-        });
-        refreshTokens();
-      }
+      await spendTokens(
+        getTokenCost(assistantContent.length),
+        `${mode}${mode === "code" ? ` (${codeTool})` : ""} generation`,
+        input,
+      );
     } catch (err: any) {
       toast.error(err.message || "Failed to get response");
       setMessages(prev => [...prev, { role: "assistant", content: "Sorry, an error occurred. Please try again." }]);
