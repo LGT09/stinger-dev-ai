@@ -96,6 +96,16 @@ const AIStudio = () => {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [transcribing, setTranscribing] = useState(false);
+  // Active project bound to the current chat thread (so follow-up prompts keep
+  // building the SAME project instead of spawning a new one every message).
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProjectName, setActiveProjectName] = useState<string>("");
+  // MCP servers installed into the current project
+  const [mcpServers, setMcpServers] = useState<any[]>([]);
+  const [showMcp, setShowMcp] = useState(false);
+  const [mcpInput, setMcpInput] = useState("");
+  // APK build
+  const [apkProgress, setApkProgress] = useState<{ progress: number; stage: string; url?: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -103,6 +113,8 @@ const AIStudio = () => {
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<string | null>(null);
+  const projectIdRef = useRef<string | null>(null);
+  const threadPromiseRef = useRef<Promise<string | null> | null>(null);
 
   // Auto-grow the composer downwards (never sideways) with an internal scrollbar.
   useEffect(() => {
