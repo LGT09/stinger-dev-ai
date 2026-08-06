@@ -101,7 +101,10 @@ export const isWebProject = (files: ParsedFile[]): boolean =>
  */
 export const buildPreviewHTML = (files: ParsedFile[], title = "Preview"): string => {
   const htmlFile = files.find(f => /index\.html$/i.test(f.path)) || files.find(f => f.content.includes("<html"));
-  if (htmlFile) {
+  const cssAll = files.filter(f => /\.css$/i.test(f.path)).map(f => f.content).join("\n");
+  const reactFiles = files.filter(f => /\.(jsx|tsx)$/i.test(f.path));
+
+  if (htmlFile && reactFiles.length === 0) {
     // Inline matching CSS/JS by relative path if possible
     let html = htmlFile.content;
     const cssFiles = files.filter(f => /\.css$/i.test(f.path));
@@ -114,6 +117,9 @@ export const buildPreviewHTML = (files: ParsedFile[], title = "Preview"): string
     else html = `${html}\n${scriptTag}`;
     return html;
   }
+
+  // React / JSX / TSX project → compile in the browser with Babel standalone.
+  if (reactFiles.length > 0) return buildReactPreviewHTML(reactFiles, cssAll, title);
 
   // Fallback: render a "this is a code project, here's a summary" page
   const fileList = files.slice(0, 20).map(f => `<li><code>${f.path}</code></li>`).join("");
@@ -133,5 +139,89 @@ export const buildPreviewHTML = (files: ParsedFile[], title = "Preview"): string
   <h1>${title}</h1>
   <p>This project's source isn't a renderable website. Here's a file overview:</p>
   <ul>${fileList}</ul>
+</body></html>`;
+};
+
+/** Normalise a module path so the in-browser loader can resolve it. */
+const normalizeKey = (p: string) => p.replace(/^\.\//, "").replace(/^\//, "").replace(/\.(jsx|tsx|js|ts)$/i, "");
+
+/**
+ * Compile a React/JSX project into a self-contained HTML document using
+ * Babel standalone plus a tiny CommonJS-style module registry. This is what
+ * makes deployed React projects actually render instead of showing a blank page.
+ */
+export const buildReactPreviewHTML = (reactFiles: ParsedFile[], css: string, title: string): string => {
+  const entry =
+    reactFiles.find(f => /(^|\/)(main|index)\.(jsx|tsx)$/i.test(f.path)) ||
+    reactFiles.find(f => /(^|\/)App\.(jsx|tsx)$/i.test(f.path)) ||
+    reactFiles[0];
+
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>${title}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+<style>html,body,#root{min-height:100%}${css}</style>
+</head>
+<body><div id="root"></div>
+<script>
+window.__STINGER_SOURCES__ = ${JSON.stringify(
+    Object.fromEntries(reactFiles.map(f => [normalizeKey(f.path), f.content])),
+  )};
+window.__STINGER_ENTRY__ = ${JSON.stringify(normalizeKey(entry.path))};
+(function(){
+  var sources = window.__STINGER_SOURCES__, cache = {};
+  function resolve(from, spec){
+    if (!spec.startsWith('.')) return null;
+    var base = from.split('/').slice(0, -1);
+    spec.replace(/^\\.\\//,'').split('/').forEach(function(part){
+      if (part === '..') base.pop(); else if (part !== '.') base.push(part);
+    });
+    var key = base.join('/').replace(/\\.(jsx|tsx|js|ts)$/i,'');
+    if (sources[key]) return key;
+    if (sources[key + '/index']) return key + '/index';
+    return null;
+  }
+  function req(from, spec){
+    if (spec === 'react') return window.React;
+    if (spec === 'react-dom' || spec === 'react-dom/client') {
+      return { ...window.ReactDOM, createRoot: window.ReactDOM.createRoot, default: window.ReactDOM };
+    }
+    if (/\\.css$/i.test(spec)) return {};
+    var key = resolve(from, spec);
+    if (!key) return {};
+    return load(key);
+  }
+  function load(key){
+    if (cache[key]) return cache[key].exports;
+    var module = { exports: {} };
+    cache[key] = module;
+    var code = window.Babel.transform(sources[key], {
+      presets: [['react', { runtime: 'classic' }], ['typescript', { allExtensions: true, isTSX: true }]],
+      plugins: [['transform-modules-commonjs', { strictNamespace: false }]],
+      filename: key + '.tsx',
+    }).code;
+    new Function('exports','require','module','React', code)(
+      module.exports, function(s){ return req(key, s); }, module, window.React
+    );
+    return module.exports;
+  }
+  try {
+    var mod = load(window.__STINGER_ENTRY__);
+    var Root = mod && (mod.default || mod.App);
+    if (typeof Root === 'function') {
+      window.ReactDOM.createRoot(document.getElementById('root')).render(window.React.createElement(Root));
+    }
+  } catch (e) {
+    document.getElementById('root').innerHTML =
+      '<pre style="padding:24px;font:13px/1.6 ui-monospace,monospace;color:#ff6b6b;white-space:pre-wrap">'
+      + String(e && e.message || e) + '</pre>';
+    console.error(e);
+  }
+})();
+</script>
 </body></html>`;
 };

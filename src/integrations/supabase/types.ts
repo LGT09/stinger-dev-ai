@@ -61,7 +61,10 @@ export type Database = {
           apk_url: string | null
           created_at: string
           error: string | null
+          icon_url: string | null
           id: string
+          logs: Json
+          platform: string
           progress: number
           project_id: string
           project_name: string | null
@@ -74,7 +77,10 @@ export type Database = {
           apk_url?: string | null
           created_at?: string
           error?: string | null
+          icon_url?: string | null
           id?: string
+          logs?: Json
+          platform?: string
           progress?: number
           project_id: string
           project_name?: string | null
@@ -87,7 +93,10 @@ export type Database = {
           apk_url?: string | null
           created_at?: string
           error?: string | null
+          icon_url?: string | null
           id?: string
+          logs?: Json
+          platform?: string
           progress?: number
           project_id?: string
           project_name?: string | null
@@ -173,6 +182,7 @@ export type Database = {
           created_at: string
           html: string
           id: string
+          logs: Json
           project_id: string | null
           slug: string
           status: string
@@ -187,6 +197,7 @@ export type Database = {
           created_at?: string
           html?: string
           id?: string
+          logs?: Json
           project_id?: string | null
           slug: string
           status?: string
@@ -201,6 +212,7 @@ export type Database = {
           created_at?: string
           html?: string
           id?: string
+          logs?: Json
           project_id?: string | null
           slug?: string
           status?: string
@@ -271,6 +283,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      email_templates: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string | null
+          cta_label: string | null
+          cta_url: string | null
+          id: string
+          kind: string
+          name: string
+          sender: string
+          subject: string
+          updated_at: string
+          variables: Json
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          created_by?: string | null
+          cta_label?: string | null
+          cta_url?: string | null
+          id?: string
+          kind?: string
+          name: string
+          sender?: string
+          subject: string
+          updated_at?: string
+          variables?: Json
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          cta_label?: string | null
+          cta_url?: string | null
+          id?: string
+          kind?: string
+          name?: string
+          sender?: string
+          subject?: string
+          updated_at?: string
+          variables?: Json
+        }
+        Relationships: []
       }
       events: {
         Row: {
