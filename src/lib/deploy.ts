@@ -30,30 +30,77 @@ export const buildDeployHTML = (files: ParsedFile[], title: string): string => {
 
 export interface DeployResult { url: string; path: string; slug: string }
 
+/** True when the given username/slug pair is free (or already owned by `projectId`). */
+export const isSlugAvailable = async (username: string, slug: string, projectId?: string) => {
+  const { data } = await supabase
+    .from("deployments")
+    .select("id, project_id")
+    .eq("username", username)
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!data) return true;
+  return !!projectId && data.project_id === projectId;
+};
+
 /**
  * Deploy a project as a live website at /{username}/{project-slug}.
+ * `siteName` lets the user rename the site at deploy time; the slug is derived
+ * from it and must not collide with an existing deployment.
  */
 export const deployProject = async (
   project: { id: string; name: string; code_content?: string | null },
   username: string,
   userId: string,
+  siteName?: string,
 ): Promise<DeployResult> => {
   const files = parseProjectFiles(project.code_content, `${project.name}.txt`);
   if (files.length === 0) throw new Error("This project has no files to deploy yet.");
   if (!isWebProject(files)) throw new Error("Only web projects (HTML/JSX/TSX) can be deployed as a live site.");
 
-  const slug = slugify(project.name);
-  const html = buildDeployHTML(files, project.name);
+  const title = (siteName || project.name).trim();
+  const slug = slugify(title);
+  if (!(await isSlugAvailable(username, slug, project.id))) {
+    throw new Error(`"${slug}" is already taken — pick another site name.`);
+  }
+
+  const html = buildDeployHTML(files, title);
   const path = `/${username}/${slug}`;
   const url = `${window.location.origin}${path}`;
+  const logs = [
+    `[${new Date().toISOString()}] Collected ${files.length} file(s)`,
+    `[${new Date().toISOString()}] Compiled site bundle (${(html.length / 1024).toFixed(1)} KB)`,
+    `[${new Date().toISOString()}] Injected Stinger badge`,
+    `[${new Date().toISOString()}] Published at ${path}`,
+  ];
+
+  // Free the project's previous slug so the old name is no longer served.
+  await supabase.from("deployments").delete().eq("project_id", project.id).eq("user_id", userId).neq("slug", slug);
 
   const { error } = await supabase
     .from("deployments")
     .upsert(
-      { user_id: userId, project_id: project.id, username, slug, title: project.name, html, url, status: "live" },
+      { user_id: userId, project_id: project.id, username, slug, title, html, url, status: "live", logs },
       { onConflict: "username,slug" },
     );
   if (error) throw new Error(error.message);
 
   return { url, path, slug };
+};
+
+/** Take a site offline but keep its record (can be re-deployed later). */
+export const undeployProject = async (deploymentId: string) => {
+  const { error } = await supabase.from("deployments").update({ status: "offline" }).eq("id", deploymentId);
+  if (error) throw new Error(error.message);
+};
+
+/** Bring an offline site back online. */
+export const redeployProject = async (deploymentId: string) => {
+  const { error } = await supabase.from("deployments").update({ status: "live" }).eq("id", deploymentId);
+  if (error) throw new Error(error.message);
+};
+
+/** Permanently remove a deployment and free its URL. */
+export const deleteDeployment = async (deploymentId: string) => {
+  const { error } = await supabase.from("deployments").delete().eq("id", deploymentId);
+  if (error) throw new Error(error.message);
 };
