@@ -156,10 +156,6 @@ export const buildReactPreviewHTML = (reactFiles: ParsedFile[], css: string, tit
     reactFiles.find(f => /(^|\/)App\.(jsx|tsx)$/i.test(f.path)) ||
     reactFiles[0];
 
-  const modules = reactFiles
-    .map(f => `  ${JSON.stringify(normalizeKey(f.path))}: function(exports, require, module){\n${f.content}\n},`)
-    .join("\n");
-
   return `<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
