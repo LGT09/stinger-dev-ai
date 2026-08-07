@@ -19,7 +19,9 @@ function json(b: unknown, s = 200) {
 const template = (title: string, body: string, cta?: { label: string; url: string }) => `
 <div style="background:#0f1216;padding:32px;font-family:system-ui,-apple-system,Segoe UI,sans-serif">
   <div style="max-width:560px;margin:0 auto;background:#151a20;border:1px solid rgba(255,212,0,.25);border-radius:18px;overflow:hidden">
-    <div style="padding:22px 26px;background:linear-gradient(135deg,#ffd400,#ffb400);color:#0f1216;font-weight:900;font-size:20px">S &nbsp;Stinger AI Dev</div>
+    <div style="padding:18px 26px;background:linear-gradient(135deg,#ffd400,#ffb400);color:#0f1216;font-weight:900;font-size:20px">
+      <img src="https://nova-build-verse.lovable.app/logo.png" alt="Stinger AI Dev" width="120" style="display:block;margin:0 auto"/>
+    </div>
     <div style="padding:26px;color:#e7eaf0;font-size:15px;line-height:1.65">
       <h1 style="margin:0 0 14px;font-size:20px;color:#fff">${title}</h1>
       <div>${body.replace(/\n/g, "<br/>")}</div>

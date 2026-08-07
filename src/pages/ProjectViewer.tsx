@@ -53,6 +53,9 @@ const ProjectViewer = () => {
   const [apkHistory, setApkHistory] = useState<any[]>([]);
   const [deploying, setDeploying] = useState(false);
   const [deployment, setDeployment] = useState<{ url: string; path: string } | null>(null);
+  const [target, setTarget] = useState("android-apk");
+  const [iconUrl, setIconUrl] = useState<string | null>(null);
+  const [storeReady, setStoreReady] = useState(false);
   const channelRef = useRef<any>(null);
 
   useEffect(() => {
@@ -171,10 +174,22 @@ const ProjectViewer = () => {
     setSaving(false);
   };
 
+  const uploadIcon = async (file: File) => {
+    if (!user) return;
+    const path = `${user.id}/icons/${Date.now()}-${file.name}`;
+    const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+    if (error) { toast.error(error.message); return; }
+    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+    setIconUrl(data.publicUrl);
+    toast.success("App icon uploaded");
+  };
+
   const requestApk = async () => {
     if (!user || !id) return;
     setApkStatus({ status: "pending", progress: 2, stage: "Queued" });
-    const { data, error } = await supabase.functions.invoke("project-export", { body: { projectId: id, format: "apk" } });
+    const { data, error } = await supabase.functions.invoke("project-export", {
+      body: { projectId: id, format: "app", target, iconUrl, storeReady },
+    });
     if (error) { toast.error(error.message); setApkStatus(null); return; }
     setApkStatus({ status: data.status, apk_url: data.apk_url, progress: data.progress ?? 5, stage: "Queued" });
     toast.success(data.cached ? "Existing build ready" : (data.message || "APK build started"));
@@ -274,12 +289,12 @@ const ProjectViewer = () => {
             apkStatus?.apk_url ? (
               <a href={apkStatus.apk_url} target="_blank" rel="noreferrer"
                 className="flex items-center gap-1 bg-green-500/20 text-green-400 px-2.5 py-1 rounded-lg text-[11px] font-medium">
-                <Smartphone size={11} /> Download APK
+                <Smartphone size={11} /> Download build
               </a>
             ) : (
               <button onClick={requestApk} disabled={apkStatus?.status === "pending" || apkStatus?.status === "building"}
                 className="flex items-center gap-1 bg-accent/20 text-accent px-2.5 py-1 rounded-lg text-[11px] font-medium disabled:opacity-60">
-                <Smartphone size={11} /> {apkStatus && ["pending", "building"].includes(apkStatus.status) ? `Building ${apkStatus.progress ?? 0}%` : "Build APK"}
+                <Smartphone size={11} /> {apkStatus && ["pending", "building"].includes(apkStatus.status) ? `Building ${apkStatus.progress ?? 0}%` : "Build app"}
               </button>
             )
           )}
@@ -299,6 +314,34 @@ const ProjectViewer = () => {
           )}
         </div>
       </div>
+
+      {/* App generation controls */}
+      {isOwner && (
+        <div className="px-4 py-2 border-b border-border/50 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] text-muted-foreground">Build app for</span>
+          <select value={target} onChange={(e) => setTarget(e.target.value)}
+            className="bg-secondary/60 border border-border/60 rounded-lg px-2 py-1 text-[11px] text-foreground outline-none">
+            <option value="android-apk">Android · APK (sideload)</option>
+            <option value="android-aab">Android · AAB (Play store-ready)</option>
+            <option value="android-expo">Android · Expo / React Native</option>
+            <option value="windows-exe">Windows · EXE installer</option>
+            <option value="macos-dmg">macOS · DMG</option>
+            <option value="linux-appimage">Linux · AppImage</option>
+            <option value="linux-deb">Linux · DEB</option>
+            <option value="pwa">PWA · installable web app</option>
+          </select>
+          <label className="text-[11px] text-muted-foreground flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={storeReady} onChange={(e) => setStoreReady(e.target.checked)} className="accent-primary" />
+            Store-ready
+          </label>
+          <label className="text-[11px] px-2 py-1 rounded-lg bg-secondary/60 text-muted-foreground hover:text-foreground cursor-pointer btn-hover">
+            {iconUrl ? "Icon ✓" : "Upload app icon"}
+            <input type="file" accept="image/png,image/jpeg" className="hidden"
+              onChange={(e) => e.target.files?.[0] && uploadIcon(e.target.files[0])} />
+          </label>
+          {iconUrl && <img src={iconUrl} alt="App icon" className="w-6 h-6 rounded object-cover" />}
+        </div>
+      )}
 
       {/* APK build progress */}
       {isOwner && apkStatus && ["pending", "building"].includes(apkStatus.status) && (

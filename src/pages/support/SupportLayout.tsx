@@ -5,6 +5,7 @@ const tabs = [
   { to: "/support", label: "Help center", end: true },
   { to: "/support/faq", label: "FAQ" },
   { to: "/support/api", label: "Free APIs" },
+  { to: "/support/payments", label: "Payments" },
   { to: "/support/status", label: "System status" },
 ];
 

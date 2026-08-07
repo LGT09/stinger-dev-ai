@@ -59,49 +59,64 @@ export type Database = {
       apk_builds: {
         Row: {
           apk_url: string | null
+          artifact_name: string | null
           created_at: string
           error: string | null
           icon_url: string | null
           id: string
           logs: Json
+          packaging: string
           platform: string
           progress: number
           project_id: string
           project_name: string | null
           stage: string | null
           status: string
+          store_ready: boolean
+          target: string
+          toolchain: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           apk_url?: string | null
+          artifact_name?: string | null
           created_at?: string
           error?: string | null
           icon_url?: string | null
           id?: string
           logs?: Json
+          packaging?: string
           platform?: string
           progress?: number
           project_id: string
           project_name?: string | null
           stage?: string | null
           status?: string
+          store_ready?: boolean
+          target?: string
+          toolchain?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           apk_url?: string | null
+          artifact_name?: string | null
           created_at?: string
           error?: string | null
           icon_url?: string | null
           id?: string
           logs?: Json
+          packaging?: string
           platform?: string
           progress?: number
           project_id?: string
           project_name?: string | null
           stage?: string | null
           status?: string
+          store_ready?: boolean
+          target?: string
+          toolchain?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -483,6 +498,68 @@ export type Database = {
           username?: string | null
         }
         Relationships: []
+      }
+      project_ssh_keys: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          key_hash: string
+          key_prefix: string
+          label: string
+          last_device: string | null
+          last_ip: string | null
+          last_used_at: string | null
+          project_id: string | null
+          revoked: boolean
+          scopes: string[]
+          updated_at: string
+          user_id: string
+          uses: number
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          key_hash: string
+          key_prefix: string
+          label?: string
+          last_device?: string | null
+          last_ip?: string | null
+          last_used_at?: string | null
+          project_id?: string | null
+          revoked?: boolean
+          scopes?: string[]
+          updated_at?: string
+          user_id: string
+          uses?: number
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          key_hash?: string
+          key_prefix?: string
+          label?: string
+          last_device?: string | null
+          last_ip?: string | null
+          last_used_at?: string | null
+          project_id?: string | null
+          revoked?: boolean
+          scopes?: string[]
+          updated_at?: string
+          user_id?: string
+          uses?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_ssh_keys_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       projects: {
         Row: {
