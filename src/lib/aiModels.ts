@@ -37,7 +37,7 @@ export const AI_MODELS: AIModelOption[] = [
   { id: "music-mubert", provider: "music", model: "mubert", label: "Mubert", badge: "Music", category: "music" },
 ];
 
-export const DEFAULT_MODEL_ID = "hostify-ai";
+export const DEFAULT_MODEL_ID = "gaga-ai-nexus";
 export const DEFAULT_MUSIC_MODEL_ID = "music-suno";
 
 export function getModelById(id: string): AIModelOption {
