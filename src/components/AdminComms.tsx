@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Mail, Megaphone, CalendarDays, Send, Trash2, Sparkles, Loader2 } from "lucide-react";
+import { Mail, Megaphone, CalendarDays, Send, Trash2, Sparkles, Loader2, FileText, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-type Tab = "email" | "announcements" | "events";
+type Tab = "email" | "announcements" | "events" | "templates";
 
 const FN_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
@@ -31,13 +31,27 @@ const AdminComms = () => {
   const [ePromo, setEPromo] = useState("");
   const [eStart, setEStart] = useState("");
 
+  // email templates
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [tName, setTName] = useState("");
+  const [tKind, setTKind] = useState("update");
+  const [tSender, setTSender] = useState("Stinger AI Dev <onboarding@resend.dev>");
+  const [tSubject, setTSubject] = useState("");
+  const [tBody, setTBody] = useState("");
+  const [tVars, setTVars] = useState("name, email");
+  const [tCtaLabel, setTCtaLabel] = useState("");
+  const [tCtaUrl, setTCtaUrl] = useState("");
+  const [tTestTo, setTTestTo] = useState("");
+
   const load = useCallback(async () => {
-    const [{ data: a }, { data: e }] = await Promise.all([
+    const [{ data: a }, { data: e }, { data: t }] = await Promise.all([
       supabase.from("announcements").select("*").order("created_at", { ascending: false }).limit(20),
       supabase.from("events").select("*").order("starts_at", { ascending: false }).limit(20),
+      supabase.from("email_templates").select("*").order("created_at", { ascending: false }).limit(30),
     ]);
     setAnnouncements(a || []);
     setEvents(e || []);
+    setTemplates(t || []);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -131,6 +145,57 @@ const AdminComms = () => {
     load();
   };
 
+  const fillVars = (text: string) =>
+    text.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k) => (k === "email" ? tTestTo || "you@example.com" : `[${k}]`));
+
+  const saveTemplate = async () => {
+    if (!tName.trim() || !tSubject.trim()) { toast.error("Template name and subject are required"); return; }
+    setBusy(true);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      const { error } = await supabase.from("email_templates").insert({
+        name: tName, kind: tKind, sender: tSender, subject: tSubject, body: tBody,
+        variables: tVars.split(",").map(v => v.trim()).filter(Boolean),
+        cta_label: tCtaLabel || null, cta_url: tCtaUrl || null, created_by: u.user?.id,
+      });
+      if (error) throw error;
+      toast.success("Template saved");
+      setTName(""); setTSubject(""); setTBody(""); load();
+    } catch (err) { toast.error((err as Error).message); }
+    setBusy(false);
+  };
+
+  const sendTest = async () => {
+    if (!tTestTo.trim() || !tSubject.trim()) { toast.error("Test recipient and subject are required"); return; }
+    setBusy(true);
+    try {
+      const res = await callSendEmail({
+        mode: "single", to: tTestTo, subject: fillVars(tSubject), body: fillVars(tBody),
+        kind: tKind, cta: tCtaLabel && tCtaUrl ? { label: tCtaLabel, url: tCtaUrl } : undefined,
+      });
+      toast.success(`Test email sent (${res.sent}/${res.total})`);
+    } catch (err) { toast.error((err as Error).message); }
+    setBusy(false);
+  };
+
+  const useTemplate = (t: any) => {
+    setTName(t.name); setTKind(t.kind); setTSender(t.sender); setTSubject(t.subject);
+    setTBody(t.body); setTVars((t.variables || []).join(", "));
+    setTCtaLabel(t.cta_label || ""); setTCtaUrl(t.cta_url || "");
+  };
+
+  const removeTemplate = async (id: string) => {
+    const { error } = await supabase.from("email_templates").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    load();
+  };
+
+  const removeRow = async (table: "announcements" | "events", id: string) => {
+    const { error } = await supabase.from(table).delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    load();
+  };
+
   const field = "w-full bg-secondary/60 rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all";
 
   return (
@@ -145,6 +210,7 @@ const AdminComms = () => {
           ["email", "Send email", Mail],
           ["announcements", "Announcements", Megaphone],
           ["events", "Events & promos", CalendarDays],
+          ["templates", "Email templates", FileText],
         ] as const).map(([id, label, Icon]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] btn-hover transition-all ${
@@ -229,6 +295,56 @@ const AdminComms = () => {
                 </div>
                 <button disabled={busy} onClick={() => broadcastEvent(ev)} className="text-primary hover:opacity-80 disabled:opacity-40"><Send size={11} /></button>
                 <button onClick={() => remove("events", ev.id)} className="text-muted-foreground hover:text-destructive"><Trash2 size={11} /></button>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {tab === "templates" && (
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <input value={tName} onChange={e => setTName(e.target.value)} placeholder="Template name" className={field} />
+            <select value={tKind} onChange={e => setTKind(e.target.value)} className={field}>
+              <option value="login">Login / verification</option>
+              <option value="update">Product update</option>
+              <option value="promo">Promo</option>
+              <option value="reminder">Reminder</option>
+            </select>
+          </div>
+          <input value={tSender} onChange={e => setTSender(e.target.value)} placeholder="Sender (Name &lt;email&gt;)" className={field} />
+          <input value={tSubject} onChange={e => setTSubject(e.target.value)} placeholder="Subject — use {{name}} variables" className={field} />
+          <textarea value={tBody} onChange={e => setTBody(e.target.value)} rows={5} placeholder="Body — supports {{name}}, {{email}} …" className={field} />
+          <input value={tVars} onChange={e => setTVars(e.target.value)} placeholder="Variables (comma separated)" className={field} />
+          <div className="grid grid-cols-2 gap-2">
+            <input value={tCtaLabel} onChange={e => setTCtaLabel(e.target.value)} placeholder="Button label (optional)" className={field} />
+            <input value={tCtaUrl} onChange={e => setTCtaUrl(e.target.value)} placeholder="Button URL (optional)" className={field} />
+          </div>
+          <div className="bg-secondary/40 rounded-lg p-2 text-[11px]">
+            <p className="text-muted-foreground mb-1">Preview</p>
+            <p className="text-foreground font-medium">{fillVars(tSubject) || "Subject preview"}</p>
+            <p className="text-muted-foreground whitespace-pre-wrap">{fillVars(tBody)}</p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <input value={tTestTo} onChange={e => setTTestTo(e.target.value)} placeholder="test@email.com" className={`${field} flex-1 min-w-[160px]`} />
+            <button disabled={busy} onClick={sendTest}
+              className="flex items-center gap-1.5 bg-secondary text-foreground px-3 py-2 rounded-lg text-[11px] font-medium btn-hover disabled:opacity-50">
+              {busy ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />} Send test
+            </button>
+            <button disabled={busy} onClick={saveTemplate}
+              className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2 rounded-lg text-[11px] font-medium btn-hover disabled:opacity-50">
+              <Save size={11} /> Save
+            </button>
+          </div>
+          <div className="space-y-1.5 pt-2">
+            {templates.map(t => (
+              <div key={t.id} className="flex items-start gap-2 bg-secondary/50 rounded-lg p-2 text-[11px]">
+                <div className="flex-1 min-w-0">
+                  <p className="text-foreground font-medium truncate">{t.name} <span className="text-primary text-[10px] uppercase">{t.kind}</span></p>
+                  <p className="text-muted-foreground truncate">{t.subject}</p>
+                </div>
+                <button onClick={() => useTemplate(t)} className="text-primary hover:opacity-80">Load</button>
+                <button onClick={() => removeTemplate(t.id)} className="text-muted-foreground hover:text-destructive"><Trash2 size={11} /></button>
               </div>
             ))}
           </div>
