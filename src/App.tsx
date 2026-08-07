@@ -29,6 +29,12 @@ import SupabaseIntegration from "@/pages/SupabaseIntegration";
 import CodeVerseIntegration from "@/pages/CodeVerseIntegration";
 import Landing from "@/pages/Landing";
 import DeployedSite from "@/pages/DeployedSite";
+import Deployments from "@/pages/Deployments";
+import SupportLayout from "@/pages/support/SupportLayout";
+import SupportHome from "@/pages/support/SupportHome";
+import SupportFAQ from "@/pages/support/SupportFAQ";
+import SupportApis from "@/pages/support/SupportApis";
+import SupportStatus from "@/pages/support/SupportStatus";
 import NotFound from "@/pages/NotFound";
 import { ShieldAlert, Mail } from "lucide-react";
 
@@ -113,6 +119,7 @@ const AppContent = () => {
           <Route path="/ai" element={<AIStudio />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/projects/:id" element={<ProjectViewer />} />
+          <Route path="/deployments" element={<Deployments />} />
           <Route path="/community" element={<Community />} />
           <Route path="/integrations/supabase" element={<SupabaseIntegration />} />
           <Route path="/integrations/codeverse" element={<CodeVerseIntegration />} />
@@ -124,6 +131,12 @@ const AppContent = () => {
           <Route path="/docs" element={<Documentation />} />
           <Route path="/privacy" element={<PrivacySecurity />} />
           <Route path="/contact" element={<ContactSupport />} />
+          <Route path="/support" element={<SupportLayout />}>
+            <Route index element={<SupportHome />} />
+            <Route path="faq" element={<SupportFAQ />} />
+            <Route path="api" element={<SupportApis />} />
+            <Route path="status" element={<SupportStatus />} />
+          </Route>
           <Route path="/admin" element={<AdminDashboard />} />
         </Route>
         <Route path="/:username/:slug" element={<DeployedSite />} />
