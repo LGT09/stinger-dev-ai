@@ -64,57 +64,58 @@ const Deployments = () => {
             <motion.div
               key={d.id}
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-              className="glass rounded-2xl p-4 liquid-chrome"
+              className="glass rounded-2xl p-5 liquid-chrome"
             >
-              <div className="flex items-start gap-3 flex-wrap">
-                <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Globe size={16} className="text-primary" />
+              <div className="flex items-start gap-4 flex-wrap">
+                <div className="w-11 h-11 rounded-2xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Globe size={18} className="text-primary" />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-foreground truncate">{d.title}</p>
+                <div className="min-w-0 flex-1 basis-52">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-foreground truncate">{d.title}</p>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full ${d.status === "live" ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"}`}>
                       {d.status}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">/{d.username}/{d.slug} · {d.visits || 0} visits</p>
+                  <p className="text-xs text-muted-foreground truncate mt-1 font-mono">/{d.username}/{d.slug}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{d.visits || 0} visits</p>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button title="Copy link" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/${d.username}/${d.slug}`); toast.success("Link copied"); }}
-                    className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-all">
-                    <Copy size={14} />
-                  </button>
-                  <a title="Open site" href={`/${d.username}/${d.slug}`} target="_blank" rel="noreferrer"
-                    className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-primary transition-all">
-                    <ExternalLink size={14} />
+                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                  <a href={`/${d.username}/${d.slug}`} target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-medium bg-primary/15 text-primary hover:bg-primary/25 transition-all btn-hover">
+                    <ExternalLink size={13} /> Open
                   </a>
-                  <button title="Build logs" onClick={() => setOpenLogs(openLogs === d.id ? null : d.id)}
-                    className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-all">
-                    <Terminal size={14} />
+                  <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/${d.username}/${d.slug}`); toast.success("Link copied"); }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-medium bg-secondary/70 text-muted-foreground hover:text-foreground transition-all">
+                    <Copy size={13} /> Copy
+                  </button>
+                  <button onClick={() => setOpenLogs(openLogs === d.id ? null : d.id)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-medium bg-secondary/70 text-muted-foreground hover:text-foreground transition-all">
+                    <Terminal size={13} /> Logs
                   </button>
                   {d.status === "live" ? (
-                    <button title="Take offline" disabled={busy === d.id}
+                    <button disabled={busy === d.id}
                       onClick={() => act(d.id, () => undeployProject(d.id), "Site taken offline")}
-                      className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-yellow-400 transition-all disabled:opacity-50">
-                      <PowerOff size={14} />
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-medium bg-secondary/70 text-muted-foreground hover:text-yellow-400 transition-all disabled:opacity-50">
+                      <PowerOff size={13} /> Offline
                     </button>
                   ) : (
-                    <button title="Bring online" disabled={busy === d.id}
+                    <button disabled={busy === d.id}
                       onClick={() => act(d.id, () => redeployProject(d.id), "Site is live again")}
-                      className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-accent transition-all disabled:opacity-50">
-                      <Power size={14} />
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-medium bg-accent/15 text-accent hover:bg-accent/25 transition-all disabled:opacity-50">
+                      <Power size={13} /> Go live
                     </button>
                   )}
-                  <button title="Delete deployment" disabled={busy === d.id}
+                  <button disabled={busy === d.id}
                     onClick={() => { if (confirm(`Delete the deployment at /${d.username}/${d.slug}? The name becomes available again.`)) act(d.id, () => deleteDeployment(d.id), "Deployment deleted"); }}
-                    className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all disabled:opacity-50">
-                    <Trash2 size={14} />
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all disabled:opacity-50">
+                    <Trash2 size={13} /> Delete
                   </button>
                 </div>
               </div>
 
               {openLogs === d.id && (
-                <pre className="mt-3 bg-background/70 border border-border/50 rounded-xl p-3 text-[11px] leading-relaxed text-muted-foreground overflow-x-auto">
+                <pre className="mt-4 bg-background/70 border border-border/50 rounded-xl p-3 text-[11px] leading-relaxed text-muted-foreground overflow-x-auto">
 {(Array.isArray(d.logs) && d.logs.length ? d.logs : ["No logs recorded for this deployment."]).join("\n")}
                 </pre>
               )}
