@@ -4,8 +4,7 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, Bot, FolderKanban, Globe, CreditCard,
   Settings, ChevronLeft, ChevronRight, Zap, Shield, Book,
-  Mail, Lock, Key, Users, GitBranch, Wallet, Rocket, LifeBuoy
-} from "lucide-react";
+  Mail, Lock, Key, Users, GitBranch, Wallet, Rocket, LifeBuoy, TerminalSquare } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import logo from "@/assets/logo.png";
 
@@ -25,6 +24,7 @@ const AppSidebar = () => {
     { icon: CreditCard, label: "Tokens", path: "/tokens" },
     { icon: Wallet, label: "Wallet", path: "/wallet" },
     { icon: Key, label: "Secrets", path: "/secrets" },
+    { icon: TerminalSquare, label: "Stinger SSH", path: "/ssh" },
     { icon: Users, label: "Workspace", path: "/workspace" },
     { icon: Book, label: "Docs", path: "/docs" },
     { icon: Lock, label: "Privacy", path: "/privacy" },
