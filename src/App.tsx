@@ -35,6 +35,8 @@ import SupportHome from "@/pages/support/SupportHome";
 import SupportFAQ from "@/pages/support/SupportFAQ";
 import SupportApis from "@/pages/support/SupportApis";
 import SupportStatus from "@/pages/support/SupportStatus";
+import SupportPayments from "@/pages/support/SupportPayments";
+import SSHKeys from "@/pages/SSHKeys";
 import NotFound from "@/pages/NotFound";
 import { ShieldAlert, Mail } from "lucide-react";
 
@@ -126,6 +128,7 @@ const AppContent = () => {
           <Route path="/tokens" element={<Tokens />} />
           <Route path="/wallet" element={<Wallet />} />
           <Route path="/secrets" element={<SecretsManager />} />
+          <Route path="/ssh" element={<SSHKeys />} />
           <Route path="/workspace" element={<Workspace />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/docs" element={<Documentation />} />
@@ -135,6 +138,7 @@ const AppContent = () => {
             <Route index element={<SupportHome />} />
             <Route path="faq" element={<SupportFAQ />} />
             <Route path="api" element={<SupportApis />} />
+            <Route path="payments" element={<SupportPayments />} />
             <Route path="status" element={<SupportStatus />} />
           </Route>
           <Route path="/admin" element={<AdminDashboard />} />
