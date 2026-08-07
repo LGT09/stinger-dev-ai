@@ -63,9 +63,11 @@ const Projects = () => {
   const handleDeploy = async (p: any) => {
     if (!user) return;
     const username = (profile as any)?.username || user.email?.split("@")[0] || user.id.slice(0, 8);
+    const siteName = window.prompt("Name this site (used in the URL)", p.name)?.trim();
+    if (!siteName) return;
     setDeployingId(p.id);
     try {
-      const res = await deployProject(p, username, user.id);
+      const res = await deployProject(p, username, user.id, siteName);
       setDeployments(prev => ({ ...prev, [p.id]: res.path }));
       navigator.clipboard.writeText(res.url).catch(() => {});
       toast.success(`Live at ${res.path} — link copied`);
