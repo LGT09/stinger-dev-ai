@@ -1,1 +1,3 @@
 project_id = "bpygpwugrzjhxfxfgmbx"
+[functions.ssh-gateway]
+verify_jwt = false
