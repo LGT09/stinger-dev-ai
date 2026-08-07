@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, Bot, FolderKanban, Globe, CreditCard,
   Settings, ChevronLeft, ChevronRight, Zap, Shield, Book,
-  Mail, Lock, Key, Users, GitBranch, Wallet
+  Mail, Lock, Key, Users, GitBranch, Wallet, Rocket, LifeBuoy
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import logo from "@/assets/logo.png";
@@ -19,6 +19,7 @@ const AppSidebar = () => {
     { icon: LayoutDashboard, label: "Overview", path: "/" },
     { icon: Bot, label: "AI Studio", path: "/ai" },
     { icon: FolderKanban, label: "Projects", path: "/projects" },
+    { icon: Rocket, label: "Deployments", path: "/deployments" },
     { icon: Globe, label: "Community", path: "/community" },
     { icon: GitBranch, label: "CodeVerse", path: "/integrations/codeverse" },
     { icon: CreditCard, label: "Tokens", path: "/tokens" },
@@ -28,6 +29,7 @@ const AppSidebar = () => {
     { icon: Book, label: "Docs", path: "/docs" },
     { icon: Lock, label: "Privacy", path: "/privacy" },
     { icon: Mail, label: "Support", path: "/contact" },
+    { icon: LifeBuoy, label: "Help center", path: "/support" },
     { icon: Settings, label: "Settings", path: "/settings" },
     ...(isAdmin ? [{ icon: Shield, label: "Admin", path: "/admin" }] : []),
   ];
