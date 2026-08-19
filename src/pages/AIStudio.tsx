@@ -10,7 +10,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
-import { AI_MODELS, DEFAULT_MODEL_ID, getModelById } from "@/lib/aiModels";
+import { AI_MODELS, DEFAULT_MODEL_ID, getModelById, IMAGE_ENGINE_BY_MODEL } from "@/lib/aiModels";
+import { downloadRemote, safeName } from "@/lib/mediaDownload";
 import { streamPuter, streamQvac, isClientProvider } from "@/lib/clientAI";
 import ModelPickerDialog from "@/components/ModelPickerDialog";
 
@@ -37,6 +38,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   images?: string[];
+  media?: { kind: "song" | "video"; url: string; coverUrl?: string | null; title?: string }[];
 }
 
 interface ChatSession {
@@ -599,16 +601,28 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
 
       // Music goes through ai-router (Suno/Mubert via davidcyril). Video stays on generate-media.
       if (isImageGen) {
-        // Private image provider — endpoint & key live only in the edge function.
-        const resp = await fetch(`${FN_BASE}/generate-image`, {
+        // Private image providers — endpoints live only in the edge function.
+        const engine = IMAGE_ENGINE_BY_MODEL[selectedModelId] || "txt2img";
+        let image: string | null = null;
+        const mediaResp = await fetch(`${FN_BASE}/generate-media`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
-          body: JSON.stringify({ prompt: outgoing }),
-        });
-        const data = await resp.json();
-        if (!resp.ok || !data.image) throw new Error(data.error || "Image generation failed");
+          body: JSON.stringify({ kind: "image", prompt: outgoing, engine, image: attachedImages[0] }),
+        }).catch(() => null);
+        const mediaData = mediaResp ? await mediaResp.json().catch(() => ({})) : {};
+        image = mediaData?.url ?? null;
+        if (!image) {
+          const resp = await fetch(`${FN_BASE}/generate-image`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
+            body: JSON.stringify({ prompt: outgoing }),
+          });
+          const data = await resp.json();
+          if (!resp.ok || !data.image) throw new Error(data.error || "Image generation failed");
+          image = data.image;
+        }
         assistantContent = `🖼️ Here's your image for: _${outgoing.slice(0, 120)}_`;
-        setMessages(prev => [...prev, { role: "assistant", content: assistantContent, images: [data.image] }]);
+        setMessages(prev => [...prev, { role: "assistant", content: assistantContent, images: [image as string] }]);
         void persistMessage("assistant", assistantContent);
         await spendTokens(getTokenCost(500), "image generation", outgoing);
         setIsLoading(false);
@@ -616,47 +630,32 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
       }
 
       if (isMusicGen) {
-        const musicModel = selectedModel.provider === "music" ? selectedModel.model : "suno";
-        const resp = await fetch(AI_ROUTER_URL, {
+        // Stinger Sonic — returns audio + cover art, both downloadable.
+        const resp = await fetch(`${FN_BASE}/generate-media`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}` },
-          body: JSON.stringify({ provider: "music", model: musicModel, messages: [{ role: "user", content: outgoing }] }),
+          body: JSON.stringify({ kind: "song", prompt: outgoing }),
         });
-        if (!resp.ok || !resp.body) throw new Error("Music generation failed");
-        const reader = resp.body.getReader();
-        const dec = new TextDecoder();
-        let buf = "";
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += dec.decode(value, { stream: true });
-          let idx: number;
-          while ((idx = buf.indexOf("\n")) !== -1) {
-            const line = buf.slice(0, idx).trim(); buf = buf.slice(idx + 1);
-            if (!line.startsWith("data: ")) continue;
-            const j = line.slice(6).trim();
-            if (j === "[DONE]") continue;
-            try {
-              const p = JSON.parse(j);
-              const c = p.choices?.[0]?.delta?.content;
-              if (c) {
-                assistantContent += c;
-                setMessages(prev => {
-                  const last = prev[prev.length - 1];
-                  if (last?.role === "assistant" && prev[prev.length - 2]?.role === "user")
-                    return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantContent } : m));
-                  return [...prev, { role: "assistant", content: assistantContent }];
-                });
-              }
-            } catch {}
-          }
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || "Song generation failed");
+        if (!data.tracks?.length) {
+          assistantContent = `⏳ ${data.message || "Stinger Sonic is busy — try again shortly."}`;
+          setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
+        } else {
+          assistantContent = `🎵 **Stinger Sonic** generated ${data.tracks.length} track(s) for: _${outgoing.slice(0, 100)}_`;
+          setMessages(prev => [...prev, {
+            role: "assistant",
+            content: assistantContent,
+            media: data.tracks.map((t: any) => ({ kind: "song" as const, url: t.audioUrl, coverUrl: t.coverUrl, title: t.title })),
+          }]);
         }
-        await spendTokens(getTokenCost(assistantContent.length), "music generation", input);
+        void persistMessage("assistant", assistantContent);
+        await spendTokens(getTokenCost(800), "music generation", input);
         setIsLoading(false);
         return;
       }
 
-      // Video: call generate-media (real provider with API key) — non-streaming JSON.
+      // Video: Stinger Motion via generate-media — non-streaming JSON.
       if (isVideoGen) {
         const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-media`, {
           method: "POST",
@@ -665,31 +664,28 @@ ASSET COMMANDS: whenever the project needs an image (hero, logo, product shot, a
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
           body: JSON.stringify({
-            kind: isVideoGen ? "video" : "song",
+            kind: "video",
             prompt: input,
             aspectRatio: "16:9",
-            duration: isVideoGen ? 6 : 30,
-            quality: "standard",
-            style: isMusicGen ? "pop" : undefined,
+            sound: true,
           }),
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || "Media generation failed");
-        const lines: string[] = [];
         if (data.url) {
-          lines.push(`✅ **${isVideoGen ? "Video" : "Song"} ready!**`);
-          lines.push("");
-          lines.push(`[Download / Open](${data.url})`);
-          if (isVideoGen) lines.push(`\n<video src="${data.url}" controls style="max-width:100%;border-radius:12px"></video>`);
-          else lines.push(`\n<audio src="${data.url}" controls style="width:100%"></audio>`);
-        } else if (data.queued) {
-          lines.push(`⏳ ${data.message || "Generation queued."}`);
-          lines.push(`\n_Provider returned no URL yet — your API key is configured but the upstream provider may be busy. Try again in a moment._`);
+          assistantContent = `🎬 **Stinger Motion** rendered your video for: _${input.slice(0, 100)}_`;
+          setMessages(prev => [...prev, {
+            role: "assistant",
+            content: assistantContent,
+            media: [{ kind: "video" as const, url: data.url, title: input.slice(0, 60) }],
+          }]);
+        } else {
+          assistantContent = `⏳ ${data.message || "Generation queued — try again in a moment."}`;
+          setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
         }
-        assistantContent = lines.join("\n");
-        setMessages(prev => [...prev, { role: "assistant", content: assistantContent }]);
+        void persistMessage("assistant", assistantContent);
         // Token deduction (skipped for admins inside spendTokens)
-        await spendTokens(getTokenCost(assistantContent.length), `${mode} generation`, input);
+        await spendTokens(getTokenCost(1000), `${mode} generation`, input);
         setIsLoading(false);
         return;
       }
