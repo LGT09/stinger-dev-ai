@@ -37,6 +37,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   images?: string[];
+  media?: { kind: "song" | "video"; url: string; coverUrl?: string | null; title?: string }[];
 }
 
 interface ChatSession {
