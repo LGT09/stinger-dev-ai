@@ -10,7 +10,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
-import { AI_MODELS, DEFAULT_MODEL_ID, getModelById } from "@/lib/aiModels";
+import { AI_MODELS, DEFAULT_MODEL_ID, getModelById, IMAGE_ENGINE_BY_MODEL } from "@/lib/aiModels";
+import { downloadRemote, safeName } from "@/lib/mediaDownload";
 import { streamPuter, streamQvac, isClientProvider } from "@/lib/clientAI";
 import ModelPickerDialog from "@/components/ModelPickerDialog";
 
