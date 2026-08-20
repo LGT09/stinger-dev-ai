@@ -501,9 +501,11 @@ export type Database = {
       }
       project_ssh_keys: {
         Row: {
+          commands_run: number
           created_at: string
-          expires_at: string
+          expires_at: string | null
           id: string
+          is_admin_key: boolean
           key_hash: string
           key_prefix: string
           label: string
@@ -513,14 +515,17 @@ export type Database = {
           project_id: string | null
           revoked: boolean
           scopes: string[]
+          tokens_spent: number
           updated_at: string
           user_id: string
           uses: number
         }
         Insert: {
+          commands_run?: number
           created_at?: string
-          expires_at?: string
+          expires_at?: string | null
           id?: string
+          is_admin_key?: boolean
           key_hash: string
           key_prefix: string
           label?: string
@@ -530,14 +535,17 @@ export type Database = {
           project_id?: string | null
           revoked?: boolean
           scopes?: string[]
+          tokens_spent?: number
           updated_at?: string
           user_id: string
           uses?: number
         }
         Update: {
+          commands_run?: number
           created_at?: string
-          expires_at?: string
+          expires_at?: string | null
           id?: string
+          is_admin_key?: boolean
           key_hash?: string
           key_prefix?: string
           label?: string
@@ -547,6 +555,7 @@ export type Database = {
           project_id?: string | null
           revoked?: boolean
           scopes?: string[]
+          tokens_spent?: number
           updated_at?: string
           user_id?: string
           uses?: number
@@ -662,6 +671,36 @@ export type Database = {
           messages?: Json
           share_code?: string
           title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ssh_activity: {
+        Row: {
+          command: string
+          created_at: string
+          detail: string | null
+          id: string
+          key_id: string | null
+          tokens: number
+          user_id: string
+        }
+        Insert: {
+          command: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          key_id?: string | null
+          tokens?: number
+          user_id: string
+        }
+        Update: {
+          command?: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          key_id?: string | null
+          tokens?: number
           user_id?: string
         }
         Relationships: []
