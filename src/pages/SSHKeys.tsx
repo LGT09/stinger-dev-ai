@@ -16,6 +16,12 @@ const SCOPES = [
 
 const GATEWAY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ssh-gateway`;
 
+/** Bash shim users paste into any foreign terminal to drive Stinger by key. */
+const CONNECT_CMD = `export STINGER_KEY="sk_stg_…"
+stinger() { local c="\${1:-menu}"; shift; local a="{}"; while [ "$#" -gt 0 ]; do case "$1" in --*) a=$(printf '%s' "$a" | sed "s/}$/\\"\${1#--}\\":\\"$2\\"}/;s/{\\"/{\\"/"); shift 2;; *) a=$(printf '%s' "$a" | sed "s/}$/\\"prompt\\":\\"$1\\"}/"); shift;; esac; done; curl -s ${GATEWAY} -H "Content-Type: application/json" -d "{\\"key\\":\\"$STINGER_KEY\\",\\"command\\":\\"$c\\",\\"args\\":$a}" | sed -e 's/\\\\n/\\n/g' -e 's/^{"ok":true,"output":"//' -e 's/"[,}].*$//'; }
+stinger menu`;
+
+
 const randomKey = () => {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
