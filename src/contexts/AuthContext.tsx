@@ -60,9 +60,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const refreshProfile = async () => { if (user) await fetchProfile(user.id); };
   const refreshTokens = async () => { if (user) await fetchTokens(user.id); };
 
+  // Sessions are capped at 24 hours — after that the user must sign in again.
+  const SESSION_MAX_MS = 24 * 60 * 60 * 1000;
+  const SESSION_START_KEY = "stinger-session-start";
+
+  /** Returns true when the session was force-expired. */
+  const enforceSessionAge = async (uid?: string) => {
+    if (!uid) return false;
+    const started = Number(localStorage.getItem(SESSION_START_KEY) || 0);
+    if (!started) { localStorage.setItem(SESSION_START_KEY, String(Date.now())); return false; }
+    if (Date.now() - started > SESSION_MAX_MS) {
+      localStorage.removeItem(SESSION_START_KEY);
+      await supabase.auth.signOut();
+      return true;
+    }
+    return false;
+  };
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
+
       setUser(session?.user ?? null);
       if (session?.user) {
         setTimeout(async () => {
