@@ -117,10 +117,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     // Touch session every 60s while page is open, and enforce the 24h cap.
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       touchSession();
-      enforceSessionAge(user?.id);
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.user) await enforceSessionAge(data.session.user.id);
     }, 60_000);
+
 
     window.addEventListener("focus", touchSession);
 
