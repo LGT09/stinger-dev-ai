@@ -83,7 +83,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       setUser(session?.user ?? null);
       if (session?.user) {
+        if (_event === "SIGNED_IN") localStorage.setItem(SESSION_START_KEY, String(Date.now()));
         setTimeout(async () => {
+          if (await enforceSessionAge(session.user.id)) { setLoading(false); return; }
           await Promise.all([fetchProfile(session.user.id), fetchRoles(session.user.id), fetchTokens(session.user.id)]);
           if (_event === "SIGNED_IN") {
             startSession(session.user.id);
@@ -92,6 +94,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setLoading(false);
         }, 0);
       } else {
+        localStorage.removeItem(SESSION_START_KEY);
         setProfile(null);
         setIsAdmin(false);
         setTokenBalance(0);
@@ -99,7 +102,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user && await enforceSessionAge(session.user.id)) { setLoading(false); return; }
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -112,8 +116,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
-    // Touch session every 60s while page is open
-    const interval = setInterval(() => { touchSession(); }, 60_000);
+    // Touch session every 60s while page is open, and enforce the 24h cap.
+    const interval = setInterval(() => {
+      touchSession();
+      enforceSessionAge(user?.id);
+    }, 60_000);
+
     window.addEventListener("focus", touchSession);
 
     return () => { subscription.unsubscribe(); clearInterval(interval); window.removeEventListener("focus", touchSession); };
