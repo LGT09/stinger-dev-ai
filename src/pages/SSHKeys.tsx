@@ -16,6 +16,17 @@ const SCOPES = [
 
 const GATEWAY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ssh-gateway`;
 
+/** Bash shim users paste into any foreign terminal to drive Stinger by key. */
+const CONNECT_CMD = [
+  `export STINGER_KEY="sk_stg_…"`,
+  `stinger() { c="\${1:-menu}"; shift; curl -s ${GATEWAY} -H 'Content-Type: application/json' \\`,
+  `  -d "$(python3 -c 'import json,sys;print(json.dumps({"key":sys.argv[1],"command":sys.argv[2],"args":{"prompt":" ".join(sys.argv[3:])}}))' "$STINGER_KEY" "$c" "$@")" \\`,
+  `  | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("output") or d.get("error"))'; }`,
+  `stinger menu`,
+].join("\n");
+
+
+
 const randomKey = () => {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
@@ -146,6 +157,23 @@ const SSHKeys = () => {
         </div>
       </div>
 
+      {/* Always-visible connect command */}
+      <div className="glass rounded-2xl p-5 liquid-chrome space-y-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm font-medium text-foreground flex items-center gap-2"><TerminalSquare size={14} className="text-primary" /> Connect from any terminal</p>
+          <button onClick={() => { navigator.clipboard.writeText(CONNECT_CMD); toast.success("Bash command copied"); }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-medium bg-primary/15 text-primary hover:bg-primary/25 transition-all btn-hover">
+            <Copy size={12} /> Copy bash command
+          </button>
+        </div>
+        <pre className="bg-background/70 border border-border/50 rounded-xl p-3 text-[11px] leading-relaxed text-primary/90 overflow-auto whitespace-pre">{CONNECT_CMD}</pre>
+        <p className="text-[11px] text-muted-foreground">
+          Paste it into any bash/zsh shell, replace <code className="text-primary font-mono">sk_stg_…</code> with your key, then run <code className="text-primary font-mono">stinger menu</code>.
+        </p>
+      </div>
+
+
+
       {/* Create */}
       <div className="glass rounded-2xl p-5 liquid-chrome space-y-4">
         <p className="text-sm font-medium text-foreground flex items-center gap-2"><Plus size={14} className="text-primary" /> New SSH key</p>
@@ -232,30 +260,20 @@ const SSHKeys = () => {
         })}
       </div>
 
-      {/* Terminal */}
-      <div className="glass rounded-2xl p-5 liquid-chrome space-y-3">
-        <p className="text-sm font-medium text-foreground flex items-center gap-2"><Cpu size={14} className="text-accent" /> SSH terminal</p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <input value={termKey} onChange={e => setTermKey(e.target.value)} placeholder="sk_stg_…"
-            className="bg-secondary/50 border border-border/60 rounded-xl px-3 py-2 text-xs font-mono text-foreground outline-none focus:border-primary/60" />
-          <select value={model} onChange={e => setModel(e.target.value)}
-            className="bg-secondary/50 border border-border/60 rounded-xl px-3 py-2 text-xs text-foreground outline-none focus:border-primary/60">
-            {chatModels.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-          </select>
-        </div>
-        <pre className="bg-background/70 border border-border/50 rounded-xl p-3 text-[11px] leading-relaxed text-muted-foreground h-56 overflow-auto whitespace-pre-wrap">
-{out.join("\n\n")}
-        </pre>
-        <div className="flex gap-2">
-          <input value={cmd} onChange={e => setCmd(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !running) run(); }}
-            placeholder='help · whoami · models · projects · prompt "build a shop" · deploy --project_id <id>'
-            className="flex-1 bg-secondary/50 border border-border/60 rounded-xl px-3 py-2 text-xs font-mono text-foreground outline-none focus:border-primary/60" />
-          <button onClick={run} disabled={running}
-            className="bg-accent text-background px-4 py-2 rounded-xl text-xs font-medium btn-hover disabled:opacity-60 inline-flex items-center gap-1.5">
-            {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Run
-          </button>
-        </div>
+      {/* Command reference */}
+      <div className="glass rounded-2xl p-5 liquid-chrome space-y-2">
+        <p className="text-sm font-medium text-foreground flex items-center gap-2"><Cpu size={14} className="text-accent" /> Activities available over SSH</p>
+        <pre className="bg-background/70 border border-border/50 rounded-xl p-3 text-[11px] leading-relaxed text-muted-foreground overflow-auto whitespace-pre-wrap">{`stinger menu                       # chalk logo + activity menu
+stinger whoami                     # account, plan, tokens, key expiry
+stinger models                     # list models  ·  stinger model --model gaga-ai-nexus
+stinger projects                   # your projects
+stinger cat --project_id <id>      # print project source
+stinger prompt "build a shop"      # chat / code with Stinger AI
+stinger deploy --project_id <id>   # publish a live site
+stinger builds                     # recent app builds
+stinger revoke                     # kill this key`}</pre>
       </div>
+
     </div>
   );
 };

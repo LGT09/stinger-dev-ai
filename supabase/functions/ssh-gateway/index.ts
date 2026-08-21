@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import chalk from "npm:chalk@5.3.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,13 +10,20 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
-// chalk in a non-TTY runtime needs an explicit colour level.
-const c = new chalk.Instance({ level: 3 });
-const gold = c.hex("#ffd400");
-const neon = c.hex("#00f0ff");
-const dim = c.hex("#7a8590");
-const ok = c.hex("#4ade80");
-const bad = c.hex("#f87171");
+/**
+ * Truecolor ANSI painters (chalk-style output without the npm dependency,
+ * which does not initialise inside the Deno edge runtime).
+ */
+const paint = (hex: string) => {
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  return (s: string) => `\u001b[38;2;${r};${g};${b}m${s}\u001b[0m`;
+};
+const gold = paint("#ffd400");
+const neon = paint("#00f0ff");
+const dim = paint("#7a8590");
+const ok = paint("#4ade80");
+const bad = paint("#f87171");
+
 
 /** Chalk-rendered Stinger hornet mark — gold body, neon bolt. */
 const LOGO = [
