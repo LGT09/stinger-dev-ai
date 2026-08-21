@@ -146,6 +146,23 @@ const SSHKeys = () => {
         </div>
       </div>
 
+      {/* Always-visible connect command */}
+      <div className="glass rounded-2xl p-5 liquid-chrome space-y-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm font-medium text-foreground flex items-center gap-2"><TerminalSquare size={14} className="text-primary" /> Connect from any terminal</p>
+          <button onClick={() => { navigator.clipboard.writeText(CONNECT_CMD); toast.success("Bash command copied"); }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-medium bg-primary/15 text-primary hover:bg-primary/25 transition-all btn-hover">
+            <Copy size={12} /> Copy bash command
+          </button>
+        </div>
+        <pre className="bg-background/70 border border-border/50 rounded-xl p-3 text-[11px] leading-relaxed text-primary/90 overflow-auto whitespace-pre">{CONNECT_CMD}</pre>
+        <p className="text-[11px] text-muted-foreground">
+          Paste it into any bash/zsh shell, replace <code className="text-primary font-mono">sk_stg_…</code> with your key, then run <code className="text-primary font-mono">stinger menu</code>.
+        </p>
+      </div>
+
+
+
       {/* Create */}
       <div className="glass rounded-2xl p-5 liquid-chrome space-y-4">
         <p className="text-sm font-medium text-foreground flex items-center gap-2"><Plus size={14} className="text-primary" /> New SSH key</p>
