@@ -232,30 +232,20 @@ const SSHKeys = () => {
         })}
       </div>
 
-      {/* Terminal */}
-      <div className="glass rounded-2xl p-5 liquid-chrome space-y-3">
-        <p className="text-sm font-medium text-foreground flex items-center gap-2"><Cpu size={14} className="text-accent" /> SSH terminal</p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <input value={termKey} onChange={e => setTermKey(e.target.value)} placeholder="sk_stg_…"
-            className="bg-secondary/50 border border-border/60 rounded-xl px-3 py-2 text-xs font-mono text-foreground outline-none focus:border-primary/60" />
-          <select value={model} onChange={e => setModel(e.target.value)}
-            className="bg-secondary/50 border border-border/60 rounded-xl px-3 py-2 text-xs text-foreground outline-none focus:border-primary/60">
-            {chatModels.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-          </select>
-        </div>
-        <pre className="bg-background/70 border border-border/50 rounded-xl p-3 text-[11px] leading-relaxed text-muted-foreground h-56 overflow-auto whitespace-pre-wrap">
-{out.join("\n\n")}
-        </pre>
-        <div className="flex gap-2">
-          <input value={cmd} onChange={e => setCmd(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !running) run(); }}
-            placeholder='help · whoami · models · projects · prompt "build a shop" · deploy --project_id <id>'
-            className="flex-1 bg-secondary/50 border border-border/60 rounded-xl px-3 py-2 text-xs font-mono text-foreground outline-none focus:border-primary/60" />
-          <button onClick={run} disabled={running}
-            className="bg-accent text-background px-4 py-2 rounded-xl text-xs font-medium btn-hover disabled:opacity-60 inline-flex items-center gap-1.5">
-            {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Run
-          </button>
-        </div>
+      {/* Command reference */}
+      <div className="glass rounded-2xl p-5 liquid-chrome space-y-2">
+        <p className="text-sm font-medium text-foreground flex items-center gap-2"><Cpu size={14} className="text-accent" /> Activities available over SSH</p>
+        <pre className="bg-background/70 border border-border/50 rounded-xl p-3 text-[11px] leading-relaxed text-muted-foreground overflow-auto whitespace-pre-wrap">{`stinger menu                       # chalk logo + activity menu
+stinger whoami                     # account, plan, tokens, key expiry
+stinger models                     # list models  ·  stinger model --model gaga-ai-nexus
+stinger projects                   # your projects
+stinger cat --project_id <id>      # print project source
+stinger prompt "build a shop"      # chat / code with Stinger AI
+stinger deploy --project_id <id>   # publish a live site
+stinger builds                     # recent app builds
+stinger revoke                     # kill this key`}</pre>
       </div>
+
     </div>
   );
 };
