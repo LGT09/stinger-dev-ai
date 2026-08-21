@@ -17,9 +17,14 @@ const SCOPES = [
 const GATEWAY = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ssh-gateway`;
 
 /** Bash shim users paste into any foreign terminal to drive Stinger by key. */
-const CONNECT_CMD = `export STINGER_KEY="sk_stg_…"
-stinger() { local c="\${1:-menu}"; shift; local a="{}"; while [ "$#" -gt 0 ]; do case "$1" in --*) a=$(printf '%s' "$a" | sed "s/}$/\\"\${1#--}\\":\\"$2\\"}/;s/{\\"/{\\"/"); shift 2;; *) a=$(printf '%s' "$a" | sed "s/}$/\\"prompt\\":\\"$1\\"}/"); shift;; esac; done; curl -s ${GATEWAY} -H "Content-Type: application/json" -d "{\\"key\\":\\"$STINGER_KEY\\",\\"command\\":\\"$c\\",\\"args\\":$a}" | sed -e 's/\\\\n/\\n/g' -e 's/^{"ok":true,"output":"//' -e 's/"[,}].*$//'; }
-stinger menu`;
+const CONNECT_CMD = [
+  `export STINGER_KEY="sk_stg_…"`,
+  `stinger() { c="\${1:-menu}"; shift; curl -s ${GATEWAY} -H 'Content-Type: application/json' \\`,
+  `  -d "$(python3 -c 'import json,sys;print(json.dumps({"key":sys.argv[1],"command":sys.argv[2],"args":{"prompt":" ".join(sys.argv[3:])}}))' "$STINGER_KEY" "$c" "$@")" \\`,
+  `  | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("output") or d.get("error"))'; }`,
+  `stinger menu`,
+].join("\n");
+
 
 
 const randomKey = () => {
