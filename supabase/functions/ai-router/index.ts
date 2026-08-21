@@ -6,10 +6,9 @@ const corsHeaders = {
 };
 
 /**
- * Hostify-only AI router.
- * Tries grok → gemini → deepseek in order. Streams an OpenAI-style SSE delta
- * so the AIStudio reader keeps working unchanged. In `code` mode, prepends a
- * structured-output instruction so the playground can parse files.
+ * Stinger AI router — NO Lovable AI. Everything runs on the provided
+ * Stinger endpoints/keys: Hostify (grok → gemini → deepseek) and
+ * GAGA AI Nexus (Hyperbolic-compatible, GAGA_AI_NEXUS_API_KEY).
  */
 const HOSTIFY_ENDPOINTS = [
   "https://api.hostify.co.zw/api/ai/grok",
@@ -17,9 +16,9 @@ const HOSTIFY_ENDPOINTS = [
   "https://api.hostify.co.zw/api/ai/deepseek",
 ];
 
-const LOVABLE_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
 const GAGA_KEY = Deno.env.get("GAGA_AI_NEXUS_API_KEY");
+const GAGA_ENDPOINT = "https://api.hyperbolic.xyz/v1/chat/completions";
+const GAGA_MODEL = "meta-llama/Meta-Llama-3.1-70B-Instruct";
 
 const CODE_SYSTEM = `You are operating in CODE mode for the Stinger AI Dev playground.
 You MUST respond with raw JSON only — no prose, no markdown fences.
@@ -38,11 +37,7 @@ serve(async (req) => {
     if (!Array.isArray(messages) || messages.length === 0) return jsonErr("messages required", 400);
 
     if (provider === "music") return await proxyMusic(model, messages);
-
-    // GAGA AI Nexus — own model, Lovable Gateway as transport.
     if (provider === "gaga") return await proxyGaga(messages, mode);
-
-    // Hostify (with Lovable AI fallback so the playground never dies).
     return await proxyHostify(messages, mode);
   } catch (e: any) {
     console.error("ai-router error:", e);
@@ -84,21 +79,18 @@ function buildPrompt(messages: any[], mode?: string): string {
 
 async function tryHostify(url: string, prompt: string): Promise<string | null> {
   try {
-    // The Hostify endpoints accept both GET (?prompt=) and POST {prompt}; try POST first.
     const post = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt, model: url.split("/").pop(), chat_mode: "default" }),
     }).catch(() => null);
     if (post && post.ok) {
-      const t = await post.text();
-      const out = extractText(t);
+      const out = extractText(await post.text());
       if (out) return out;
     }
     const get = await fetch(`${url}?prompt=${encodeURIComponent(prompt)}`).catch(() => null);
     if (get && get.ok) {
-      const t = await get.text();
-      const out = extractText(t);
+      const out = extractText(await get.text());
       if (out) return out;
     }
   } catch (e) {
@@ -127,79 +119,52 @@ async function proxyHostify(messages: any[], mode?: string) {
     const text = await tryHostify(url, prompt);
     if (text) return sseFromText(text);
   }
-  // Fallback: stream from Lovable AI Gateway (always available).
-  return await streamLovable(messages, mode);
+  // Last resort: GAGA Nexus (still a Stinger-provided key, never Lovable AI).
+  const gaga = await gagaOnce(messages, mode);
+  if (gaga) return gaga;
+  return sseFromText("⚠️ Stinger AI endpoints are unreachable right now. Please retry in a moment.");
+}
+
+async function gagaOnce(messages: any[], mode?: string): Promise<Response | null> {
+  if (!GAGA_KEY) return null;
+  const sys = mode === "code" ? [{ role: "system", content: CODE_SYSTEM }] : [];
+  try {
+    const r = await fetch(GAGA_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${GAGA_KEY}` },
+      body: JSON.stringify({ model: GAGA_MODEL, messages: [...sys, ...messages], stream: true, max_tokens: 4096 }),
+    });
+    if (r.ok && r.body) return new Response(r.body, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+    console.error("GAGA error", r.status, (await r.text()).slice(0, 200));
+  } catch (e) { console.error("GAGA failed", e); }
+  return null;
 }
 
 async function proxyGaga(messages: any[], mode?: string) {
   const branded = [
-    { role: "system", content: "You are GAGA AI Nexus, an advanced reasoning model. Identify as GAGA AI Nexus when asked." },
+    { role: "system", content: "You are GAGA AI Nexus, an advanced reasoning model built into Stinger AI Dev. Identify as GAGA AI Nexus when asked." },
     ...messages,
   ];
-  // Try GAGA's native endpoint first (Hyperbolic-compatible OpenAI schema).
-  if (GAGA_KEY) {
-    try {
-      const r = await fetch("https://api.hyperbolic.xyz/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${GAGA_KEY}` },
-        body: JSON.stringify({
-          model: "meta-llama/Meta-Llama-3.1-70B-Instruct",
-          messages: branded,
-          stream: true,
-          max_tokens: 2048,
-        }),
-      });
-      if (r.ok && r.body) {
-        return new Response(r.body, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
-      }
-    } catch (e) { console.error("GAGA native failed", e); }
+  const r = await gagaOnce(branded, mode);
+  if (r) return r;
+  // Fall back onto Hostify (Stinger-provided too).
+  const prompt = buildPrompt(branded, mode);
+  for (const url of HOSTIFY_ENDPOINTS) {
+    const text = await tryHostify(url, prompt);
+    if (text) return sseFromText(text);
   }
-  // Fallback: Lovable Gateway (always available).
-  return await streamLovable(branded, mode);
-}
-
-async function streamLovable(messages: any[], mode?: string, key?: string | null) {
-  const useKey = key || LOVABLE_KEY;
-  if (!useKey) return sseFromText("⚠️ AI is not configured. Please contact support.");
-  const sys = mode === "code" ? [{ role: "system", content: CODE_SYSTEM }] : [];
-  const body = {
-    model: "google/gemini-3-flash-preview",
-    messages: [...sys, ...messages],
-    stream: true,
-  };
-  const r = await fetch(LOVABLE_GATEWAY, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${useKey}` },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok || !r.body) {
-    const t = await r.text().catch(() => "");
-    return sseFromText(`⚠️ AI gateway error (${r.status}): ${t.slice(0, 160) || "no body"}`);
-  }
-  return new Response(r.body, {
-    headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-  });
+  return sseFromText("⚠️ GAGA AI Nexus is unreachable right now. Please retry in a moment.");
 }
 
 async function proxyMusic(model: string, messages: any[]) {
   const prompt = [...messages].reverse().find(m => m.role === "user")?.content || "";
-  if (model === "mubert") {
-    try {
-      const r = await fetch(`https://apis.davidcyril.name.ng/aimusic/mubert/create?prompt=${encodeURIComponent(prompt)}`);
-      const j = await r.json().catch(() => ({}));
-      const url = j?.response?.url || j?.url || j?.audio || j?.result;
-      if (!url) return sseFromText(`⏳ Mubert queued: ${j?.message || "no URL yet"}. Try again shortly.`);
-      return sseFromText(`✅ **Mubert track ready!**\n\n<audio src="${url}" controls style="width:100%"></audio>\n\n[Download](${url})`);
-    } catch (e: any) { return sseFromText(`⚠️ Mubert error: ${e.message}`); }
+  try {
+    const r = await fetch(`https://omegatech-api.dixonomega.tech/api/ai/sonu4?prompt=${encodeURIComponent(prompt)}`);
+    const j = await r.json().catch(() => ({} as any));
+    const url = j?.result?.audio_url || j?.response?.audio_url || j?.audio_url || j?.url;
+    if (!url) return sseFromText(`⏳ Stinger Sonic queued: ${j?.message || "no URL yet"}. Try again shortly.`);
+    return sseFromText(`✅ **Track ready!**\n\n<audio src="${url}" controls style="width:100%"></audio>\n\n[Download](${url})`);
+  } catch (e: any) {
+    return sseFromText(`⚠️ Music engine error: ${e.message}`);
   }
-  if (model === "suno") {
-    try {
-      const r = await fetch(`https://apis.davidcyril.name.ng/aimusic/suno/create?prompt=${encodeURIComponent(prompt)}`);
-      const j = await r.json().catch(() => ({}));
-      const url = j?.response?.audio_url || j?.audio_url || j?.url;
-      if (!url) return sseFromText(`⏳ Suno queued: ${j?.message || "no URL yet"}.`);
-      return sseFromText(`✅ **Suno song ready!**\n\n<audio src="${url}" controls style="width:100%"></audio>\n\n[Download](${url})`);
-    } catch (e: any) { return sseFromText(`⚠️ Suno error: ${e.message}`); }
-  }
-  return jsonErr(`Unknown music model: ${model}`, 400);
 }
