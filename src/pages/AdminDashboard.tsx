@@ -41,13 +41,22 @@ const AdminDashboard = () => {
 
   const loadUsers = async () => {
     setLoading(true);
-    const { data: profiles } = await supabase.from("profiles").select("*");
+    const [{ data: profiles }, { data: balances }, { data: sessions }] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("user_id, display_name, email, is_verified, is_banned, is_suspended, ban_reason, plan")
+        .order("created_at", { ascending: false })
+        .limit(500),
+      supabase.from("token_balances").select("user_id, balance").limit(1000),
+      supabase
+        .from("user_sessions")
+        .select("user_id, ip_address, last_seen_at, device, browser, city, country")
+        .order("last_seen_at", { ascending: false })
+        .limit(500),
+    ]);
     if (!profiles) { setLoading(false); return; }
-    const { data: balances } = await supabase.from("token_balances").select("*");
-    const { data: sessions } = await supabase
-      .from("user_sessions")
-      .select("user_id, ip_address, last_seen_at, device, browser, city, country")
-      .order("last_seen_at", { ascending: false });
+    const balanceByUser: Record<string, number> = {};
+    (balances || []).forEach((b: any) => { balanceByUser[b.user_id] = b.balance; });
     const latestByUser: Record<string, any> = {};
     (sessions || []).forEach((s: any) => { if (!latestByUser[s.user_id]) latestByUser[s.user_id] = s; });
     const merged = profiles.map((p: any) => {
