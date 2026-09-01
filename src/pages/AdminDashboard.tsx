@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { motion } from "framer-motion";
 import { Shield, Users, Zap, DollarSign, Search, Plus, Minus, Ban, AlertTriangle, Check, X, RefreshCw, Globe, Monitor, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import AdminComms from "@/components/AdminComms";
+const AdminComms = lazy(() => import("@/components/AdminComms"));
 import { toast } from "sonner";
 
 interface UserRow {
@@ -32,6 +32,7 @@ const AdminDashboard = () => {
   const [editPricing, setEditPricing] = useState<Record<string, { tier: string; tokens: number; price: number }>>({});
   const [banReason, setBanReason] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [limit, setLimit] = useState(25);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -41,20 +42,29 @@ const AdminDashboard = () => {
 
   const loadUsers = async () => {
     setLoading(true);
-    const { data: profiles } = await supabase.from("profiles").select("*");
+    const [{ data: profiles }, { data: balances }, { data: sessions }] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("user_id, display_name, email, is_verified, is_banned, is_suspended, ban_reason, plan")
+        .order("created_at", { ascending: false })
+        .limit(500),
+      supabase.from("token_balances").select("user_id, balance").limit(1000),
+      supabase
+        .from("user_sessions")
+        .select("user_id, ip_address, last_seen_at, device, browser, city, country")
+        .order("last_seen_at", { ascending: false })
+        .limit(500),
+    ]);
     if (!profiles) { setLoading(false); return; }
-    const { data: balances } = await supabase.from("token_balances").select("*");
-    const { data: sessions } = await supabase
-      .from("user_sessions")
-      .select("user_id, ip_address, last_seen_at, device, browser, city, country")
-      .order("last_seen_at", { ascending: false });
+    const balanceByUser: Record<string, number> = {};
+    (balances || []).forEach((b: any) => { balanceByUser[b.user_id] = b.balance; });
     const latestByUser: Record<string, any> = {};
     (sessions || []).forEach((s: any) => { if (!latestByUser[s.user_id]) latestByUser[s.user_id] = s; });
     const merged = profiles.map((p: any) => {
       const s = latestByUser[p.user_id];
       return {
         ...p,
-        balance: balances?.find((b: any) => b.user_id === p.user_id)?.balance ?? 0,
+        balance: balanceByUser[p.user_id] ?? 0,
         last_seen_at: s?.last_seen_at ?? null,
         last_ip: s?.ip_address ?? null,
         last_device: s?.device ?? null,
@@ -151,10 +161,15 @@ const AdminDashboard = () => {
     );
   }
 
-  const filtered = users.filter(u =>
-    (u.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (u.display_name ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? users.filter(u =>
+        (u.email ?? "").toLowerCase().includes(q) ||
+        (u.display_name ?? "").toLowerCase().includes(q)
+      )
+    : users;
+  const visible = filtered.slice(0, limit);
+
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
@@ -183,7 +198,9 @@ const AdminDashboard = () => {
       </div>
 
       {/* Communications */}
-      <AdminComms />
+      <Suspense fallback={<div className="glass rounded-xl p-4 text-xs text-muted-foreground">Loading communications…</div>}>
+        <AdminComms />
+      </Suspense>
 
       {/* Token Pricing */}
       <div className="glass rounded-xl p-4">
@@ -216,11 +233,11 @@ const AdminDashboard = () => {
       <div className="glass rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Search size={14} className="text-muted-foreground" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search users..." className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none" />
+          <input value={search} onChange={e => { setSearch(e.target.value); setLimit(25); }} placeholder="Search users..." className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none" />
         </div>
         <div className="space-y-2">
-          {filtered.map(u => (
-            <motion.div key={u.user_id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`p-3 rounded-lg text-xs space-y-2 transition-all ${
+          {visible.map(u => (
+            <div key={u.user_id} className={`p-3 rounded-lg text-xs space-y-2 transition-all ${
               u.is_banned ? "bg-destructive/10 border border-destructive/20" :
               u.is_suspended ? "bg-yellow-500/10 border border-yellow-500/20" :
               "bg-secondary/50 hover:bg-secondary/70"
@@ -262,9 +279,15 @@ const AdminDashboard = () => {
                   </>
                 )}
               </div>
-            </motion.div>
+            </div>
           ))}
+          {filtered.length === 0 && <p className="text-xs text-muted-foreground">No users match that search.</p>}
         </div>
+        {visible.length < filtered.length && (
+          <button onClick={() => setLimit(l => l + 25)} className="mt-3 w-full rounded-lg bg-secondary py-2 text-xs text-foreground hover:opacity-90 btn-hover">
+            Load more ({filtered.length - visible.length} remaining)
+          </button>
+        )}
       </div>
     </div>
   );

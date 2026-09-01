@@ -107,10 +107,11 @@ const SSHKeys = () => {
   };
 
   const revoke = async (id: string) => {
-    if (!confirm("Revoke this key? Any device using it loses access immediately.")) return;
-    const { error } = await supabase.from("project_ssh_keys").update({ revoked: true }).eq("id", id);
+    if (!confirm("Revoke this key? It is deleted immediately and any device using it loses access.")) return;
+    // Revoked keys are purged from the database rather than kept as dead rows.
+    const { error } = await supabase.from("project_ssh_keys").delete().eq("id", id);
     if (error) return toast.error(error.message);
-    toast.success("Key revoked");
+    toast.success("Key revoked and removed");
     load();
   };
 

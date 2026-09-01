@@ -975,6 +975,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      purge_stale_data: { Args: never; Returns: undefined }
     }
     Enums: {
       app_plan: "free" | "pro"
