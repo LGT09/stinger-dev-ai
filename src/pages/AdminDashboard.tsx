@@ -160,10 +160,15 @@ const AdminDashboard = () => {
     );
   }
 
-  const filtered = users.filter(u =>
-    (u.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (u.display_name ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? users.filter(u =>
+        (u.email ?? "").toLowerCase().includes(q) ||
+        (u.display_name ?? "").toLowerCase().includes(q)
+      )
+    : users;
+  const visible = filtered.slice(0, limit);
+
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
