@@ -97,7 +97,7 @@ const Tokens = () => {
               <p className="text-2xl font-bold text-gradient mt-2">{p.tokens.toLocaleString()}</p>
               <p className="text-xs text-muted-foreground">tokens</p>
               <p className="text-lg font-semibold text-foreground mt-2">${p.price}</p>
-              <motion.button whileHover={{ scale: 1.05 }} onClick={() => handlePurchase(p.tier)}
+              <motion.button whileHover={{ scale: 1.05 }} onClick={() => setCheckout(p)}
                 className="mt-3 w-full bg-primary text-primary-foreground rounded-lg py-2 text-xs font-medium hover:opacity-90 flex items-center justify-center gap-1 btn-hover">
                 <CreditCard size={12} /> Purchase
               </motion.button>
