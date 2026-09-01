@@ -104,8 +104,51 @@ const Tokens = () => {
             </motion.div>
           ))}
         </div>
-        <p className="text-xs text-muted-foreground mt-3">Visit <a href="https://support.stinger.co.zw" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">support.stinger.co.zw</a> to complete your purchase.</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-4">
+          {PAYMENT_METHODS.map(({ id, icon: Icon, name }) => (
+            <div key={id} className="flex items-center gap-2 rounded-lg bg-secondary/50 px-3 py-2">
+              <Icon size={12} className="text-primary" />
+              <span className="text-[11px] text-muted-foreground">{name}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground mt-3">All payments are billed by Traxxion Tech. See <a href="/support/payments" className="text-primary hover:underline">payment methods</a> for full details.</p>
       </div>
+
+      <AnimatePresence>
+        {checkout && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-3"
+            onClick={() => setCheckout(null)}>
+            <motion.div initial={{ y: 30, scale: 0.97 }} animate={{ y: 0, scale: 1 }} exit={{ y: 20, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              className="glass liquid-chrome rounded-2xl p-5 w-full max-w-md space-y-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{checkout.tier} — ${checkout.price}</p>
+                  <p className="text-xs text-muted-foreground">{checkout.tokens.toLocaleString()} tokens · choose a payment method</p>
+                </div>
+                <button onClick={() => setCheckout(null)} className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary"><X size={14} /></button>
+              </div>
+              <div className="space-y-2">
+                {PAYMENT_METHODS.map(({ id, icon: Icon, name, detail }) => (
+                  <button key={id} onClick={() => startCheckout(id)}
+                    className="w-full flex items-start gap-3 text-left rounded-xl bg-secondary/50 hover:bg-secondary p-3 transition-all hover-lift">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Icon size={14} className="text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-foreground">{name}</p>
+                      <p className="text-[11px] text-muted-foreground">{detail}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
 
       {/* Upgrade tiers */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
