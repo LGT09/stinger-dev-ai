@@ -28,9 +28,20 @@ const Tokens = () => {
     if (data) setPricing(data);
   };
 
-  const handlePurchase = (tier: string) => {
-    const url = `https://support.stinger.co.zw?topic=${encodeURIComponent("Token Purchase: " + tier)}&email=${encodeURIComponent(user?.email || "")}`;
+  const [checkout, setCheckout] = useState<any | null>(null);
+
+  const PAYMENT_METHODS = [
+    { id: "card", icon: CreditCard, name: "Card", detail: "Visa, Mastercard, Amex — instant activation." },
+    { id: "mobile", icon: Smartphone, name: "Mobile money", detail: "EcoCash, OneMoney, InnBucks — under 2 minutes." },
+    { id: "bank", icon: Building2, name: "Bank / invoice", detail: "Invoiced by Traxxion Tech, activated within 24h." },
+    { id: "crypto", icon: Bitcoin, name: "Crypto", detail: "USDT (TRC-20) or Bitcoin." },
+  ];
+
+  const startCheckout = (method: string) => {
+    if (!checkout) return;
+    const url = `https://support.stinger.co.zw?topic=${encodeURIComponent(`Token Purchase: ${checkout.tier} ($${checkout.price})`)}&method=${method}&email=${encodeURIComponent(user?.email || "")}`;
     window.open(url, "_blank");
+    setCheckout(null);
   };
 
   const copyReferral = () => {
