@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Zap, TrendingUp, ArrowUpRight, ShoppingCart, CreditCard, Share2, Copy } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Zap, TrendingUp, ArrowUpRight, ShoppingCart, CreditCard, Share2, Copy, Smartphone, Building2, Bitcoin, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
