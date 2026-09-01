@@ -63,7 +63,7 @@ const AdminDashboard = () => {
       const s = latestByUser[p.user_id];
       return {
         ...p,
-        balance: balances?.find((b: any) => b.user_id === p.user_id)?.balance ?? 0,
+        balance: balanceByUser[p.user_id] ?? 0,
         last_seen_at: s?.last_seen_at ?? null,
         last_ip: s?.ip_address ?? null,
         last_device: s?.device ?? null,
