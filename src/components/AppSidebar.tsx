@@ -1,18 +1,25 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   LayoutDashboard, Bot, FolderKanban, Globe, CreditCard,
   Settings, ChevronLeft, ChevronRight, Zap, Shield, Book,
-  Mail, Lock, Key, Users, GitBranch, Wallet, Rocket, LifeBuoy, TerminalSquare } from "lucide-react";
+  Mail, Lock, Key, Users, GitBranch, Wallet, Rocket, LifeBuoy, TerminalSquare,
+  Menu, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsMobile } from "@/hooks/use-mobile";
 import logo from "@/assets/logo.png";
 
 const AppSidebar = () => {
   const [collapsed, setCollapsed] = useState(false);
+  const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const isMobile = useIsMobile();
   const { isAdmin, tokenBalance, profile } = useAuth();
+
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => { setOpen(false); }, [location.pathname]);
 
   const navItems = [
     { icon: LayoutDashboard, label: "Overview", path: "/" },
@@ -34,6 +41,107 @@ const AppSidebar = () => {
     ...(isAdmin ? [{ icon: Shield, label: "Admin", path: "/admin" }] : []),
   ];
 
+  const showLabels = isMobile || !collapsed;
+
+  const NavList = () => (
+    <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+      {navItems.map(({ icon: Icon, label, path }) => {
+        const active = location.pathname === path;
+        return (
+          <button
+            key={path}
+            onClick={() => navigate(path)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all hover:translate-x-1 ${
+              active
+                ? "bg-primary/10 text-primary glow-yellow border-glow"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/80"
+            }`}
+          >
+            <Icon size={16} className={active ? "text-primary" : ""} />
+            {showLabels && <span className="truncate">{label}</span>}
+          </button>
+        );
+      })}
+    </nav>
+  );
+
+  const Footer = () => (
+    <div className="p-2 border-t border-border/50">
+      {showLabels && (
+        <button
+          onClick={() => navigate("/wallet")}
+          className="w-full px-3 py-2 mb-2 rounded-lg bg-primary/5 border border-primary/20 shimmer text-left hover:scale-[1.02] transition-transform"
+        >
+          <div className="flex items-center gap-1.5 text-xs text-primary relative z-10">
+            <Zap size={12} className="pulse-glow" />
+            <span className="font-medium">{tokenBalance.toLocaleString()} tokens</span>
+            {tokenBalance === 0 && <span className="ml-auto text-[9px] text-destructive">Top up</span>}
+          </div>
+        </button>
+      )}
+      {!isMobile && (
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="w-full flex items-center justify-center p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-all hover:scale-105"
+        >
+          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        </button>
+      )}
+    </div>
+  );
+
+  if (isMobile) {
+    return (
+      <>
+        <header className="fixed top-0 inset-x-0 z-40 glass-strong border-b border-border/50 flex items-center gap-3 px-3 h-14">
+          <button
+            onClick={() => setOpen(true)}
+            aria-label="Open navigation"
+            className="p-2 rounded-lg text-foreground hover:bg-secondary transition-all"
+          >
+            <Menu size={18} />
+          </button>
+          <img src={logo} alt="Stinger AI Dev" className="w-7 h-7" />
+          <span className="text-sm font-semibold text-gradient">Stinger Dev</span>
+          <button
+            onClick={() => navigate("/wallet")}
+            className="ml-auto flex items-center gap-1 text-xs text-primary px-2 py-1 rounded-lg bg-primary/10"
+          >
+            <Zap size={11} /> {tokenBalance.toLocaleString()}
+          </button>
+        </header>
+
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-background/70 backdrop-blur-sm"
+              onClick={() => setOpen(false)}
+            >
+              <motion.aside
+                initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
+                transition={{ type: "spring", stiffness: 320, damping: 32 }}
+                onClick={e => e.stopPropagation()}
+                className="h-full w-[264px] glass-strong border-r border-border/50 flex flex-col liquid-chrome"
+              >
+                <div className="flex items-center gap-3 p-4 border-b border-border/50">
+                  <img src={logo} alt="Stinger AI Dev" className="w-8 h-8" />
+                  <span className="text-sm font-semibold text-gradient">Stinger Dev</span>
+                  {profile?.is_verified && <span className="text-blue-400 text-xs">✔</span>}
+                  <button onClick={() => setOpen(false)} aria-label="Close navigation" className="ml-auto p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary">
+                    <X size={16} />
+                  </button>
+                </div>
+                <NavList />
+                <Footer />
+              </motion.aside>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </>
+    );
+  }
+
   return (
     <motion.aside
       className="h-screen glass-strong flex flex-col border-r border-border/50 sticky top-0 liquid-chrome"
@@ -43,64 +151,20 @@ const AppSidebar = () => {
       <div className="flex items-center gap-3 p-4 border-b border-border/50">
         <motion.img
           src={logo}
-          alt="Stinger"
+          alt="Stinger AI Dev"
           className="w-9 h-9 flex-shrink-0"
           whileHover={{ scale: 1.1, rotate: 5 }}
           transition={{ type: "spring", stiffness: 400 }}
         />
         {!collapsed && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="truncate">
+          <div className="truncate">
             <span className="text-sm font-semibold text-gradient">Stinger Dev</span>
             {profile?.is_verified && <span className="text-blue-400 ml-1 text-xs">✔</span>}
-          </motion.div>
+          </div>
         )}
       </div>
-
-      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ icon: Icon, label, path }, i) => {
-          const active = location.pathname === path;
-          return (
-            <motion.button
-              key={path}
-              onClick={() => navigate(path)}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.03 }}
-              whileHover={{ x: 4 }}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
-                active
-                  ? "bg-primary/10 text-primary glow-yellow border-glow"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/80"
-              }`}
-            >
-              <Icon size={16} className={active ? "text-primary" : ""} />
-              {!collapsed && <span className="truncate">{label}</span>}
-            </motion.button>
-          );
-        })}
-      </nav>
-
-      <div className="p-2 border-t border-border/50">
-        {!collapsed && (
-          <motion.button
-            onClick={() => navigate("/wallet")}
-            className="w-full px-3 py-2 mb-2 rounded-lg bg-primary/5 border border-primary/20 shimmer text-left"
-            whileHover={{ scale: 1.02 }}
-          >
-            <div className="flex items-center gap-1.5 text-xs text-primary relative z-10">
-              <Zap size={12} className="pulse-glow" />
-              <span className="font-medium">{tokenBalance.toLocaleString()} tokens</span>
-              {tokenBalance === 0 && <span className="ml-auto text-[9px] text-destructive">Top up</span>}
-            </div>
-          </motion.button>
-        )}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="w-full flex items-center justify-center p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-all hover:scale-105"
-        >
-          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
-      </div>
+      <NavList />
+      <Footer />
     </motion.aside>
   );
 };
