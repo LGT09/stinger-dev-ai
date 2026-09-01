@@ -32,6 +32,7 @@ const AdminDashboard = () => {
   const [editPricing, setEditPricing] = useState<Record<string, { tier: string; tokens: number; price: number }>>({});
   const [banReason, setBanReason] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [limit, setLimit] = useState(25);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -230,11 +231,11 @@ const AdminDashboard = () => {
       <div className="glass rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Search size={14} className="text-muted-foreground" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search users..." className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none" />
+          <input value={search} onChange={e => { setSearch(e.target.value); setLimit(25); }} placeholder="Search users..." className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none" />
         </div>
         <div className="space-y-2">
-          {filtered.map(u => (
-            <motion.div key={u.user_id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`p-3 rounded-lg text-xs space-y-2 transition-all ${
+          {visible.map(u => (
+            <div key={u.user_id} className={`p-3 rounded-lg text-xs space-y-2 transition-all ${
               u.is_banned ? "bg-destructive/10 border border-destructive/20" :
               u.is_suspended ? "bg-yellow-500/10 border border-yellow-500/20" :
               "bg-secondary/50 hover:bg-secondary/70"
@@ -276,9 +277,15 @@ const AdminDashboard = () => {
                   </>
                 )}
               </div>
-            </motion.div>
+            </div>
           ))}
+          {filtered.length === 0 && <p className="text-xs text-muted-foreground">No users match that search.</p>}
         </div>
+        {visible.length < filtered.length && (
+          <button onClick={() => setLimit(l => l + 25)} className="mt-3 w-full rounded-lg bg-secondary py-2 text-xs text-foreground hover:opacity-90 btn-hover">
+            Load more ({filtered.length - visible.length} remaining)
+          </button>
+        )}
       </div>
     </div>
   );
