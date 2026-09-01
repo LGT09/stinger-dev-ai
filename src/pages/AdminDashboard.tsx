@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { motion } from "framer-motion";
 import { Shield, Users, Zap, DollarSign, Search, Plus, Minus, Ban, AlertTriangle, Check, X, RefreshCw, Globe, Monitor, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import AdminComms from "@/components/AdminComms";
+const AdminComms = lazy(() => import("@/components/AdminComms"));
 import { toast } from "sonner";
 
 interface UserRow {
@@ -198,7 +198,9 @@ const AdminDashboard = () => {
       </div>
 
       {/* Communications */}
-      <AdminComms />
+      <Suspense fallback={<div className="glass rounded-xl p-4 text-xs text-muted-foreground">Loading communications…</div>}>
+        <AdminComms />
+      </Suspense>
 
       {/* Token Pricing */}
       <div className="glass rounded-xl p-4">
