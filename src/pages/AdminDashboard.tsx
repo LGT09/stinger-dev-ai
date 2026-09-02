@@ -230,6 +230,32 @@ const AdminDashboard = () => {
         <AdminComms />
       </Suspense>
 
+      {/* Bulk token granting */}
+      <div className="glass liquid-chrome rounded-xl p-4 space-y-3">
+        <p className="text-xs font-medium text-foreground flex items-center gap-2"><Zap size={13} className="text-primary" /> Grant tokens</p>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <select value={bulkTarget} onChange={e => setBulkTarget(e.target.value as any)} className="bg-secondary rounded-lg px-2 py-1.5 text-foreground">
+            <option value="all">All users</option>
+            <option value="filtered">Search results</option>
+            <option value="selected">Selected users</option>
+          </select>
+          <select value={bulkMode} onChange={e => setBulkMode(e.target.value as any)} className="bg-secondary rounded-lg px-2 py-1.5 text-foreground">
+            <option value="add">Add / deduct</option>
+            <option value="set">Set balance to</option>
+          </select>
+          <input type="number" value={bulkAmount} onChange={e => setBulkAmount(e.target.value === "" ? "" : +e.target.value)}
+            className="bg-secondary rounded-lg px-2 py-1.5 w-24 text-foreground" placeholder="amount" />
+          <button onClick={runBulk} disabled={bulkBusy}
+            className="btn-hover bg-primary text-primary-foreground rounded-lg px-3 py-1.5 font-medium disabled:opacity-60">
+            {bulkBusy ? "Applying…" : "Apply"}
+          </button>
+          <span className="text-[10px] text-muted-foreground">
+            {bulkTarget === "selected" ? `${Object.values(selected).filter(Boolean).length} selected` : bulkTarget === "filtered" ? `${filteredIds().length} matched` : `${users.length} users`}
+          </span>
+        </div>
+        <p className="text-[10px] text-muted-foreground">Use a negative amount to deduct. Every change is written to each user's token history.</p>
+      </div>
+
       {/* Token Pricing */}
       <div className="glass rounded-xl p-4">
         <p className="text-xs font-medium text-foreground mb-3">Token Pricing</p>
