@@ -82,22 +82,36 @@ const AdminDashboard = () => {
   };
 
   const grantTokens = async (userId: string, amount: number) => {
-    if (!amount) return;
-    const u = users.find(u => u.user_id === userId);
-    if (!u) return;
-    const newBalance = Math.max(0, (u.balance ?? 0) + amount);
-    const { error } = await supabase.from("token_balances").update({ balance: newBalance }).eq("user_id", userId);
+    if (!amount) { toast.error("Enter an amount first"); return; }
+    const { error } = await supabase.rpc("admin_grant_tokens", { _amount: amount, _user_ids: [userId], _mode: "add" });
     if (error) { toast.error("Failed: " + error.message); return; }
-    await supabase.from("token_transactions").insert({
-      user_id: userId,
-      amount,
-      action: amount > 0 ? "Admin grant" : "Admin deduction",
-      description: `Admin adjusted by ${amount} tokens`,
-    });
     toast.success(`${amount > 0 ? "Granted" : "Deducted"} ${Math.abs(amount)} tokens`);
     setTokenAmount(p => ({ ...p, [userId]: 0 }));
     loadUsers();
   };
+
+  /** Bulk grant / deduct / set — everyone, the current search results, or picked users. */
+  const runBulk = async () => {
+    const amount = Number(bulkAmount);
+    if (!amount && bulkMode !== "set") { toast.error("Enter an amount"); return; }
+    let ids: string[] | null = null;
+    if (bulkTarget === "selected") {
+      ids = Object.keys(selected).filter(id => selected[id]);
+      if (!ids.length) { toast.error("Select at least one user"); return; }
+    } else if (bulkTarget === "filtered") {
+      ids = filteredIds();
+      if (!ids.length) { toast.error("No users match the search"); return; }
+    }
+    if (bulkTarget === "all" && !confirm(`Apply "${bulkMode} ${amount}" tokens to EVERY user?`)) return;
+    setBulkBusy(true);
+    const { data, error } = await supabase.rpc("admin_grant_tokens", { _amount: amount, _user_ids: ids, _mode: bulkMode });
+    setBulkBusy(false);
+    if (error) { toast.error("Failed: " + error.message); return; }
+    toast.success(`Tokens updated for ${data ?? 0} user(s)`);
+    setSelected({});
+    loadUsers();
+  };
+
 
   const togglePlan = async (userId: string, plan: "free" | "pro") => {
     const { error } = await supabase.from("profiles").update({ plan: plan === "free" ? "pro" : "free" }).eq("user_id", userId);
