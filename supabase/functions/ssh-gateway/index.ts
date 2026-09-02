@@ -45,11 +45,12 @@ const menu = (isAdminKey: boolean) => [
   neon("  Select an activity:"),
   `   ${gold("1")} ${"prompt"}    ${dim("— talk to Stinger AI / code / build")}`,
   `   ${gold("2")} ${"projects"}  ${dim("— list your projects")}`,
-  `   ${gold("3")} ${"cat"}       ${dim("— print a project's source")}`,
-  `   ${gold("4")} ${"deploy"}    ${dim("— publish a project as a live site")}`,
+  `   ${gold("3")} ${"open"}      ${dim("— enter a project workspace (its own tab of tools)")}`,
+  `   ${gold("4")} ${"deploy"}    ${dim("— publish a project and get back a live URL")}`,
   `   ${gold("5")} ${"builds"}    ${dim("— recent app builds")}`,
   `   ${gold("6")} ${"models"}    ${dim("— list / switch AI models")}`,
   `   ${gold("7")} ${"whoami"}    ${dim("— account, tokens, key expiry")}`,
+  `   ${gold("9")} ${"guide"}     ${dim("— how to use Stinger SSH")}`,
   isAdminKey ? `   ${gold("8")} ${"admin"}      ${dim("— users, bans, tokens, platform stats")}` : "",
   `   ${gold("0")} ${"revoke"}    ${dim("— revoke this key")}`,
   "",
@@ -57,10 +58,36 @@ const menu = (isAdminKey: boolean) => [
   "",
 ].filter(Boolean).join("\n");
 
+const GUIDE = [
+  "",
+  LOGO,
+  "",
+  gold("  HOW TO USE STINGER SSH"),
+  "",
+  neon("  1. Create a key") + dim("  — stinger.co.zw/ssh → Generate key (valid 1440 min)"),
+  neon("  2. Load the shim") + dim(" — paste the connect snippet for your terminal, then: stinger menu"),
+  neon("  3. Talk to the AI") + dim(" — stinger prompt \"build me a portfolio site\""),
+  neon("  4. Open a project") + dim(" — stinger open --project_id <id>   (workspace tools below)"),
+  neon("  5. Ship it") + dim("       — stinger deploy --project_id <id> --name my-site → live URL"),
+  "",
+  gold("  PROJECT WORKSPACE (after `open`)"),
+  `   ${neon("ls")}       ${dim("— list the project's files")}`,
+  `   ${neon("view")}     ${dim("— view code:  view --project_id <id> --file src/App.tsx")}`,
+  `   ${neon("chat")}     ${dim("— ask the AI about this project")}`,
+  `   ${neon("code")}     ${dim("— code with the AI, changes are saved to the project")}`,
+  `   ${neon("deploy")}   ${dim("— publish and return the live URL")}`,
+  `   ${neon("exit")}     ${dim("— leave the workspace")}`,
+  "",
+  dim("  Every command accepts --model gaga-ai-nexus | hostify-ai"),
+  dim("  Tokens: chat 3 · code 12 · deploy 5   ·   admin keys are never charged"),
+  "",
+].join("\n");
+
 const NUM: Record<string, string> = {
-  "1": "prompt", "2": "projects", "3": "cat", "4": "deploy",
-  "5": "builds", "6": "models", "7": "whoami", "8": "admin", "0": "revoke",
+  "1": "prompt", "2": "projects", "3": "open", "4": "deploy",
+  "5": "builds", "6": "models", "7": "whoami", "8": "admin", "9": "guide", "0": "revoke",
 };
+
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
