@@ -172,13 +172,85 @@ serve(async (req) => {
         return json({ ok: true, output: out, projects: data || [] });
       }
 
-      case "cat": {
+      case "guide":
+      case "docs":
+      case "help-me":
+        return json({ ok: true, output: GUIDE, prompt: `root@${username}.stingerssh:~$ ` });
+
+      case "cat":
+      case "view": {
         if (!need("files")) return json({ error: bad("Key lacks the 'files' scope") }, 403);
         const { data } = await admin.from("projects").select("name, code_content")
           .eq("id", args.project_id).eq("user_id", uid).maybeSingle();
         if (!data) return json({ error: bad("Project not found") }, 404);
-        return json({ ok: true, output: data.code_content || "", name: data.name });
+        const files = parseFiles(data.code_content);
+        if (args.file && files) {
+          const f = files.find((x: any) => x.path === args.file || x.path?.endsWith(String(args.file)));
+          if (!f) return json({ error: bad(`No file "${args.file}" in ${data.name}`) }, 404);
+          return json({ ok: true, output: `${gold(f.path)}\n${dim("─".repeat(40))}\n${f.content}`, file: f.path });
+        }
+        return json({ ok: true, output: data.code_content || dim("  (empty project)"), name: data.name });
       }
+
+      case "ls": {
+        const { data } = await admin.from("projects").select("name, code_content")
+          .eq("id", args.project_id).eq("user_id", uid).maybeSingle();
+        if (!data) return json({ error: bad("Project not found — run: projects") }, 404);
+        const files = parseFiles(data.code_content) || [];
+        return json({
+          ok: true,
+          output: files.length
+            ? files.map((f: any) => `  ${neon(f.path)} ${dim(`${(f.content || "").split("\n").length} lines`)}`).join("\n")
+            : dim("  no structured files — run: view --project_id <id>"),
+          files: files.map((f: any) => f.path),
+        });
+      }
+
+      /** Enter a project workspace: its own directory/tab with its own tools. */
+      case "open":
+      case "cd": {
+        const idOrName = String(args.project_id || args.name || "").trim();
+        if (!idOrName) return json({ error: bad("Usage: open --project_id <id>   (list them with: projects)") }, 400);
+        let { data: project } = await admin.from("projects").select("id, name, language, code_content")
+          .eq("user_id", uid).eq("id", idOrName).maybeSingle();
+        if (!project) {
+          const { data: byName } = await admin.from("projects").select("id, name, language, code_content")
+            .eq("user_id", uid).ilike("name", `%${idOrName}%`).limit(1);
+          project = byName?.[0] ?? null;
+        }
+        if (!project) return json({ error: bad("Project not found") }, 404);
+        const files = parseFiles(project.code_content) || [];
+        const { data: dep } = await admin.from("deployments").select("url, status")
+          .eq("project_id", project.id).maybeSingle();
+        const cwd = `~/projects/${slugify(project.name)}`;
+        await logActivity(`opened ${project.name}`);
+        return json({
+          ok: true,
+          project_id: project.id,
+          project_name: project.name,
+          cwd,
+          prompt: `root@${username}.stingerssh:${cwd}$ `,
+          files: files.map((f: any) => f.path),
+          url: dep?.url || null,
+          output: [
+            "",
+            `${gold("┌─")} ${neon(project.name)} ${dim(`(${project.language || "typescript"})`)}`,
+            `${gold("│")}  ${dim("files    ")} ${files.length ? files.map((f: any) => f.path).slice(0, 12).join(", ") : "—"}`,
+            `${gold("│")}  ${dim("live url ")} ${dep?.url ? ok(dep.url) : dim("not deployed")}`,
+            `${gold("└─")} ${dim("workspace tools:")}`,
+            `   ${neon("ls")}                     ${dim("list files")}`,
+            `   ${neon("view --file <path>")}     ${dim("view code")}`,
+            `   ${neon("chat \"question\"")}        ${dim("chat with AI about this project")}`,
+            `   ${neon("code \"change\"")}          ${dim("code with AI (saved to the project)")}`,
+            `   ${neon("deploy")}                 ${dim("publish and get a live URL")}`,
+            `   ${neon("exit")}                   ${dim("leave the workspace")}`,
+            "",
+          ].join("\n"),
+        });
+      }
+
+      case "exit":
+        return json({ ok: true, cwd: "~", prompt: `root@${username}.stingerssh:~$ `, output: dim("  left the project workspace") });
 
       case "builds": {
         const { data } = await admin.from("apk_builds").select("id, target, status, progress, stage, apk_url, created_at")
@@ -191,10 +263,12 @@ serve(async (req) => {
       }
 
       case "prompt":
-      case "chat": {
+      case "chat":
+      case "code": {
         if (!need("chat")) return json({ error: bad("Key lacks the 'chat' scope") }, 403);
-        const prompt = String(args.prompt || body.prompt || "").trim();
+        const prompt = String(args.prompt || args.text || body.prompt || (Array.isArray(body.rest) ? body.rest.join(" ") : "")).trim();
         if (!prompt) return json({ error: bad('Usage: prompt "your own instruction"') }, 400);
+
 
         const tokens = await balance(uid);
         if (!isAdminKey && tokens <= 0) {
