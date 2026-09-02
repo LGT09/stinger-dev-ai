@@ -297,7 +297,10 @@ const AdminDashboard = () => {
               "bg-secondary/50 hover:bg-secondary/70"
             }`}>
               <div className="flex flex-wrap items-center gap-2">
+                <input type="checkbox" checked={!!selected[u.user_id]} onChange={e => setSelected(p => ({ ...p, [u.user_id]: e.target.checked }))}
+                  className="accent-primary w-3.5 h-3.5" title="Select for bulk token grant" />
                 <div className="flex-1 min-w-[120px]">
+
                   <div className="flex items-center gap-1">
                     <span className="text-foreground font-medium">{u.display_name || "—"}</span>
                     {u.is_verified && <span className="text-blue-400">✔</span>}
