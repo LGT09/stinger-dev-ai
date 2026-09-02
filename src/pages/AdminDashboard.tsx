@@ -33,6 +33,20 @@ const AdminDashboard = () => {
   const [banReason, setBanReason] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [limit, setLimit] = useState(25);
+  const [bulkAmount, setBulkAmount] = useState<number | "">(500);
+  const [bulkMode, setBulkMode] = useState<"add" | "set">("add");
+  const [bulkTarget, setBulkTarget] = useState<"all" | "filtered" | "selected">("all");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+
+  const filteredIds = () => {
+    const s = search.trim().toLowerCase();
+    return (s
+      ? users.filter(u => (u.email ?? "").toLowerCase().includes(s) || (u.display_name ?? "").toLowerCase().includes(s))
+      : users
+    ).map(u => u.user_id);
+  };
+
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -82,22 +96,36 @@ const AdminDashboard = () => {
   };
 
   const grantTokens = async (userId: string, amount: number) => {
-    if (!amount) return;
-    const u = users.find(u => u.user_id === userId);
-    if (!u) return;
-    const newBalance = Math.max(0, (u.balance ?? 0) + amount);
-    const { error } = await supabase.from("token_balances").update({ balance: newBalance }).eq("user_id", userId);
+    if (!amount) { toast.error("Enter an amount first"); return; }
+    const { error } = await supabase.rpc("admin_grant_tokens", { _amount: amount, _user_ids: [userId], _mode: "add" });
     if (error) { toast.error("Failed: " + error.message); return; }
-    await supabase.from("token_transactions").insert({
-      user_id: userId,
-      amount,
-      action: amount > 0 ? "Admin grant" : "Admin deduction",
-      description: `Admin adjusted by ${amount} tokens`,
-    });
     toast.success(`${amount > 0 ? "Granted" : "Deducted"} ${Math.abs(amount)} tokens`);
     setTokenAmount(p => ({ ...p, [userId]: 0 }));
     loadUsers();
   };
+
+  /** Bulk grant / deduct / set — everyone, the current search results, or picked users. */
+  const runBulk = async () => {
+    const amount = Number(bulkAmount);
+    if (!amount && bulkMode !== "set") { toast.error("Enter an amount"); return; }
+    let ids: string[] | null = null;
+    if (bulkTarget === "selected") {
+      ids = Object.keys(selected).filter(id => selected[id]);
+      if (!ids.length) { toast.error("Select at least one user"); return; }
+    } else if (bulkTarget === "filtered") {
+      ids = filteredIds();
+      if (!ids.length) { toast.error("No users match the search"); return; }
+    }
+    if (bulkTarget === "all" && !confirm(`Apply "${bulkMode} ${amount}" tokens to EVERY user?`)) return;
+    setBulkBusy(true);
+    const { data, error } = await supabase.rpc("admin_grant_tokens", { _amount: amount, _user_ids: ids, _mode: bulkMode });
+    setBulkBusy(false);
+    if (error) { toast.error("Failed: " + error.message); return; }
+    toast.success(`Tokens updated for ${data ?? 0} user(s)`);
+    setSelected({});
+    loadUsers();
+  };
+
 
   const togglePlan = async (userId: string, plan: "free" | "pro") => {
     const { error } = await supabase.from("profiles").update({ plan: plan === "free" ? "pro" : "free" }).eq("user_id", userId);
@@ -202,6 +230,32 @@ const AdminDashboard = () => {
         <AdminComms />
       </Suspense>
 
+      {/* Bulk token granting */}
+      <div className="glass liquid-chrome rounded-xl p-4 space-y-3">
+        <p className="text-xs font-medium text-foreground flex items-center gap-2"><Zap size={13} className="text-primary" /> Grant tokens</p>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <select value={bulkTarget} onChange={e => setBulkTarget(e.target.value as any)} className="bg-secondary rounded-lg px-2 py-1.5 text-foreground">
+            <option value="all">All users</option>
+            <option value="filtered">Search results</option>
+            <option value="selected">Selected users</option>
+          </select>
+          <select value={bulkMode} onChange={e => setBulkMode(e.target.value as any)} className="bg-secondary rounded-lg px-2 py-1.5 text-foreground">
+            <option value="add">Add / deduct</option>
+            <option value="set">Set balance to</option>
+          </select>
+          <input type="number" value={bulkAmount} onChange={e => setBulkAmount(e.target.value === "" ? "" : +e.target.value)}
+            className="bg-secondary rounded-lg px-2 py-1.5 w-24 text-foreground" placeholder="amount" />
+          <button onClick={runBulk} disabled={bulkBusy}
+            className="btn-hover bg-primary text-primary-foreground rounded-lg px-3 py-1.5 font-medium disabled:opacity-60">
+            {bulkBusy ? "Applying…" : "Apply"}
+          </button>
+          <span className="text-[10px] text-muted-foreground">
+            {bulkTarget === "selected" ? `${Object.values(selected).filter(Boolean).length} selected` : bulkTarget === "filtered" ? `${filteredIds().length} matched` : `${users.length} users`}
+          </span>
+        </div>
+        <p className="text-[10px] text-muted-foreground">Use a negative amount to deduct. Every change is written to each user's token history.</p>
+      </div>
+
       {/* Token Pricing */}
       <div className="glass rounded-xl p-4">
         <p className="text-xs font-medium text-foreground mb-3">Token Pricing</p>
@@ -243,7 +297,10 @@ const AdminDashboard = () => {
               "bg-secondary/50 hover:bg-secondary/70"
             }`}>
               <div className="flex flex-wrap items-center gap-2">
+                <input type="checkbox" checked={!!selected[u.user_id]} onChange={e => setSelected(p => ({ ...p, [u.user_id]: e.target.checked }))}
+                  className="accent-primary w-3.5 h-3.5" title="Select for bulk token grant" />
                 <div className="flex-1 min-w-[120px]">
+
                   <div className="flex items-center gap-1">
                     <span className="text-foreground font-medium">{u.display_name || "—"}</span>
                     {u.is_verified && <span className="text-blue-400">✔</span>}

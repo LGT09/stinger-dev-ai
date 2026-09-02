@@ -45,11 +45,12 @@ const menu = (isAdminKey: boolean) => [
   neon("  Select an activity:"),
   `   ${gold("1")} ${"prompt"}    ${dim("— talk to Stinger AI / code / build")}`,
   `   ${gold("2")} ${"projects"}  ${dim("— list your projects")}`,
-  `   ${gold("3")} ${"cat"}       ${dim("— print a project's source")}`,
-  `   ${gold("4")} ${"deploy"}    ${dim("— publish a project as a live site")}`,
+  `   ${gold("3")} ${"open"}      ${dim("— enter a project workspace (its own tab of tools)")}`,
+  `   ${gold("4")} ${"deploy"}    ${dim("— publish a project and get back a live URL")}`,
   `   ${gold("5")} ${"builds"}    ${dim("— recent app builds")}`,
   `   ${gold("6")} ${"models"}    ${dim("— list / switch AI models")}`,
   `   ${gold("7")} ${"whoami"}    ${dim("— account, tokens, key expiry")}`,
+  `   ${gold("9")} ${"guide"}     ${dim("— how to use Stinger SSH")}`,
   isAdminKey ? `   ${gold("8")} ${"admin"}      ${dim("— users, bans, tokens, platform stats")}` : "",
   `   ${gold("0")} ${"revoke"}    ${dim("— revoke this key")}`,
   "",
@@ -57,10 +58,36 @@ const menu = (isAdminKey: boolean) => [
   "",
 ].filter(Boolean).join("\n");
 
+const GUIDE = [
+  "",
+  LOGO,
+  "",
+  gold("  HOW TO USE STINGER SSH"),
+  "",
+  neon("  1. Create a key") + dim("  — stinger.co.zw/ssh → Generate key (valid 1440 min)"),
+  neon("  2. Load the shim") + dim(" — paste the connect snippet for your terminal, then: stinger menu"),
+  neon("  3. Talk to the AI") + dim(" — stinger prompt \"build me a portfolio site\""),
+  neon("  4. Open a project") + dim(" — stinger open --project_id <id>   (workspace tools below)"),
+  neon("  5. Ship it") + dim("       — stinger deploy --project_id <id> --name my-site → live URL"),
+  "",
+  gold("  PROJECT WORKSPACE (after `open`)"),
+  `   ${neon("ls")}       ${dim("— list the project's files")}`,
+  `   ${neon("view")}     ${dim("— view code:  view --project_id <id> --file src/App.tsx")}`,
+  `   ${neon("chat")}     ${dim("— ask the AI about this project")}`,
+  `   ${neon("code")}     ${dim("— code with the AI, changes are saved to the project")}`,
+  `   ${neon("deploy")}   ${dim("— publish and return the live URL")}`,
+  `   ${neon("exit")}     ${dim("— leave the workspace")}`,
+  "",
+  dim("  Every command accepts --model gaga-ai-nexus | hostify-ai"),
+  dim("  Tokens: chat 3 · code 12 · deploy 5   ·   admin keys are never charged"),
+  "",
+].join("\n");
+
 const NUM: Record<string, string> = {
-  "1": "prompt", "2": "projects", "3": "cat", "4": "deploy",
-  "5": "builds", "6": "models", "7": "whoami", "8": "admin", "0": "revoke",
+  "1": "prompt", "2": "projects", "3": "open", "4": "deploy",
+  "5": "builds", "6": "models", "7": "whoami", "8": "admin", "9": "guide", "0": "revoke",
 };
+
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -145,13 +172,85 @@ serve(async (req) => {
         return json({ ok: true, output: out, projects: data || [] });
       }
 
-      case "cat": {
+      case "guide":
+      case "docs":
+      case "help-me":
+        return json({ ok: true, output: GUIDE, prompt: `root@${username}.stingerssh:~$ ` });
+
+      case "cat":
+      case "view": {
         if (!need("files")) return json({ error: bad("Key lacks the 'files' scope") }, 403);
         const { data } = await admin.from("projects").select("name, code_content")
           .eq("id", args.project_id).eq("user_id", uid).maybeSingle();
         if (!data) return json({ error: bad("Project not found") }, 404);
-        return json({ ok: true, output: data.code_content || "", name: data.name });
+        const files = parseFiles(data.code_content);
+        if (args.file && files) {
+          const f = files.find((x: any) => x.path === args.file || x.path?.endsWith(String(args.file)));
+          if (!f) return json({ error: bad(`No file "${args.file}" in ${data.name}`) }, 404);
+          return json({ ok: true, output: `${gold(f.path)}\n${dim("─".repeat(40))}\n${f.content}`, file: f.path });
+        }
+        return json({ ok: true, output: data.code_content || dim("  (empty project)"), name: data.name });
       }
+
+      case "ls": {
+        const { data } = await admin.from("projects").select("name, code_content")
+          .eq("id", args.project_id).eq("user_id", uid).maybeSingle();
+        if (!data) return json({ error: bad("Project not found — run: projects") }, 404);
+        const files = parseFiles(data.code_content) || [];
+        return json({
+          ok: true,
+          output: files.length
+            ? files.map((f: any) => `  ${neon(f.path)} ${dim(`${(f.content || "").split("\n").length} lines`)}`).join("\n")
+            : dim("  no structured files — run: view --project_id <id>"),
+          files: files.map((f: any) => f.path),
+        });
+      }
+
+      /** Enter a project workspace: its own directory/tab with its own tools. */
+      case "open":
+      case "cd": {
+        const idOrName = String(args.project_id || args.name || "").trim();
+        if (!idOrName) return json({ error: bad("Usage: open --project_id <id>   (list them with: projects)") }, 400);
+        let { data: project } = await admin.from("projects").select("id, name, language, code_content")
+          .eq("user_id", uid).eq("id", idOrName).maybeSingle();
+        if (!project) {
+          const { data: byName } = await admin.from("projects").select("id, name, language, code_content")
+            .eq("user_id", uid).ilike("name", `%${idOrName}%`).limit(1);
+          project = byName?.[0] ?? null;
+        }
+        if (!project) return json({ error: bad("Project not found") }, 404);
+        const files = parseFiles(project.code_content) || [];
+        const { data: dep } = await admin.from("deployments").select("url, status")
+          .eq("project_id", project.id).maybeSingle();
+        const cwd = `~/projects/${slugify(project.name)}`;
+        await logActivity(`opened ${project.name}`);
+        return json({
+          ok: true,
+          project_id: project.id,
+          project_name: project.name,
+          cwd,
+          prompt: `root@${username}.stingerssh:${cwd}$ `,
+          files: files.map((f: any) => f.path),
+          url: dep?.url || null,
+          output: [
+            "",
+            `${gold("┌─")} ${neon(project.name)} ${dim(`(${project.language || "typescript"})`)}`,
+            `${gold("│")}  ${dim("files    ")} ${files.length ? files.map((f: any) => f.path).slice(0, 12).join(", ") : "—"}`,
+            `${gold("│")}  ${dim("live url ")} ${dep?.url ? ok(dep.url) : dim("not deployed")}`,
+            `${gold("└─")} ${dim("workspace tools:")}`,
+            `   ${neon("ls")}                     ${dim("list files")}`,
+            `   ${neon("view --file <path>")}     ${dim("view code")}`,
+            `   ${neon("chat \"question\"")}        ${dim("chat with AI about this project")}`,
+            `   ${neon("code \"change\"")}          ${dim("code with AI (saved to the project)")}`,
+            `   ${neon("deploy")}                 ${dim("publish and get a live URL")}`,
+            `   ${neon("exit")}                   ${dim("leave the workspace")}`,
+            "",
+          ].join("\n"),
+        });
+      }
+
+      case "exit":
+        return json({ ok: true, cwd: "~", prompt: `root@${username}.stingerssh:~$ `, output: dim("  left the project workspace") });
 
       case "builds": {
         const { data } = await admin.from("apk_builds").select("id, target, status, progress, stage, apk_url, created_at")
@@ -164,60 +263,90 @@ serve(async (req) => {
       }
 
       case "prompt":
-      case "chat": {
+      case "chat":
+      case "code": {
         if (!need("chat")) return json({ error: bad("Key lacks the 'chat' scope") }, 403);
-        const prompt = String(args.prompt || body.prompt || "").trim();
+        const prompt = String(args.prompt || args.text || body.prompt || (Array.isArray(body.rest) ? body.rest.join(" ") : "")).trim();
         if (!prompt) return json({ error: bad('Usage: prompt "your own instruction"') }, 400);
+
 
         const tokens = await balance(uid);
         if (!isAdminKey && tokens <= 0) {
           return json({ error: bad("Out of tokens. Top up at stinger.co.zw/tokens") }, 402);
         }
 
-        const mode = args.mode === "code" || /build|create|app|website|site|api|bot/i.test(prompt) ? "code" : "chat";
+        const mode = command === "code" || args.mode === "code" ||
+          (command === "prompt" && /build|create|app|website|site|api|bot|landing|dashboard/i.test(prompt)) ? "code" : "chat";
         const model = MODELS.includes(String(args.model)) ? String(args.model) : "gaga-ai-nexus";
-        const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_KEY}` },
-          body: JSON.stringify({
-            provider: model === "hostify-ai" ? "hostify" : "gaga",
-            model, mode,
-            messages: [
-              { role: "system", content: `You are Stinger AI on a remote SSH session for ${username}. Be concise and terminal-friendly.` },
-              { role: "user", content: prompt },
-            ],
-          }),
-        });
-        const text = await res.text();
-        if (!res.ok) return json({ error: bad(`AI request failed [${res.status}]`) }, res.status);
-        const answer = parseSSE(text);
+
+        let answer = "";
+        try {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 45000);
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-router`, {
+            method: "POST",
+            signal: ctrl.signal,
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_KEY}` },
+            body: JSON.stringify({
+              provider: model === "hostify-ai" ? "hostify" : "gaga",
+              model, mode,
+              messages: [
+                { role: "system", content: `You are Stinger AI on a remote SSH session for ${username}. Be concise and terminal-friendly.` },
+                { role: "user", content: prompt },
+              ],
+            }),
+          });
+          clearTimeout(timer);
+          const text = await res.text();
+          if (!res.ok) {
+            console.error("ai-router failed", res.status, text.slice(0, 300));
+            return json({ error: bad(`AI request failed [${res.status}] ${text.slice(0, 160)}`) }, 502);
+          }
+          answer = parseSSE(text).trim();
+        } catch (e: any) {
+          console.error("ai call error", e);
+          return json({ error: bad(`AI unreachable: ${e?.message || "timeout"} — retry in a moment`) }, 504);
+        }
+        if (!answer) return json({ error: bad("AI returned an empty response — retry") }, 502);
 
         // Name the project from the prompt — max 4 words, AI-derived.
         let projectId: string | null = args.project_id || null;
-        let projectName = "";
+        let projectName = String(args.project_name || "");
         if (mode === "code") {
-          projectName = await deriveName(prompt);
           const files = extractFiles(answer);
-          const { data: created } = await admin.from("projects").insert({
-            user_id: uid,
-            name: projectName,
-            language: "typescript",
-            description: prompt.slice(0, 200),
-            code_content: files || answer,
-          }).select("id").maybeSingle();
-          projectId = created?.id ?? projectId;
+          if (projectId) {
+            const { data: existing } = await admin.from("projects").select("name")
+              .eq("id", projectId).eq("user_id", uid).maybeSingle();
+            if (existing) {
+              projectName = existing.name;
+              await admin.from("projects").update({ code_content: files || answer }).eq("id", projectId);
+            } else { projectId = null; }
+          }
+          if (!projectId) {
+            projectName = await deriveName(prompt);
+            const { data: created } = await admin.from("projects").insert({
+              user_id: uid,
+              name: projectName,
+              language: "typescript",
+              description: prompt.slice(0, 200),
+              code_content: files || answer,
+            }).select("id").maybeSingle();
+            projectId = created?.id ?? null;
+          }
         }
 
-        // Sync into chat history so SSH work shows up in the web app.
-        const { data: thread } = await admin.from("chat_threads").insert({
-          user_id: uid, title: (projectName || prompt).slice(0, 60), mode,
-        }).select("id").maybeSingle();
-        if (thread?.id) {
-          await admin.from("chat_messages").insert([
-            { thread_id: thread.id, user_id: uid, role: "user", content: prompt },
-            { thread_id: thread.id, user_id: uid, role: "assistant", content: answer },
-          ]);
-        }
+        // Sync into chat history so SSH work shows up in the web app (never fatal).
+        try {
+          const { data: thread } = await admin.from("chat_threads").insert({
+            user_id: uid, title: (projectName || prompt).slice(0, 60), mode,
+          }).select("id").maybeSingle();
+          if (thread?.id) {
+            await admin.from("chat_messages").insert([
+              { thread_id: thread.id, user_id: uid, role: "user", content: prompt },
+              { thread_id: thread.id, user_id: uid, role: "assistant", content: answer },
+            ]);
+          }
+        } catch (e) { console.error("history sync skipped", e); }
 
         const cost = mode === "code" ? 12 : 3;
         if (!isAdminKey) await spend(uid, cost, "SSH prompt", prompt);
@@ -225,17 +354,19 @@ serve(async (req) => {
           .update({ tokens_spent: (keyRow.tokens_spent || 0) + (isAdminKey ? 0 : cost) }).eq("id", keyRow.id);
         await logActivity(prompt, isAdminKey ? 0 : cost);
 
-        const header = mode === "code"
-          ? `${dim(`root@${username}.stingerssh`)}:${neon(`~/projects/${slugify(projectName)}`)}$ ${gold("stinger build")}\n`
+        const cwd = projectId ? `~/projects/${slugify(projectName)}` : "~";
+        const footer = mode === "code" && projectId
+          ? `\n${dim("workspace →")} ${neon(`open --project_id ${projectId}`)}  ${dim("·")}  ${neon(`deploy --project_id ${projectId}`)}`
           : "";
         return json({
           ok: true, model, project_id: projectId, project_name: projectName,
           tokens_left: isAdminKey ? null : Math.max(0, tokens - cost),
-          cwd: projectId ? `~/projects/${slugify(projectName)}` : "~",
-          prompt: `root@${username}.stingerssh:${projectId ? `~/projects/${slugify(projectName)}` : "~"}$ `,
-          output: `${header}${answer}\n\n${dim(isAdminKey ? "admin session — no tokens charged" : `− ${cost} tokens · ${Math.max(0, tokens - cost)} left`)}`,
+          cwd,
+          prompt: `root@${username}.stingerssh:${cwd}$ `,
+          output: `${answer}${footer}\n\n${dim(isAdminKey ? "admin session — no tokens charged" : `− ${cost} tokens · ${Math.max(0, tokens - cost)} left`)}`,
         });
       }
+
 
       case "deploy": {
         if (!need("deploy")) return json({ error: bad("Key lacks the 'deploy' scope") }, 403);
