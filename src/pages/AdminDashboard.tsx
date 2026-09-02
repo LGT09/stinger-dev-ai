@@ -33,6 +33,20 @@ const AdminDashboard = () => {
   const [banReason, setBanReason] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [limit, setLimit] = useState(25);
+  const [bulkAmount, setBulkAmount] = useState<number | "">(500);
+  const [bulkMode, setBulkMode] = useState<"add" | "set">("add");
+  const [bulkTarget, setBulkTarget] = useState<"all" | "filtered" | "selected">("all");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+
+  const filteredIds = () => {
+    const s = search.trim().toLowerCase();
+    return (s
+      ? users.filter(u => (u.email ?? "").toLowerCase().includes(s) || (u.display_name ?? "").toLowerCase().includes(s))
+      : users
+    ).map(u => u.user_id);
+  };
+
 
   useEffect(() => {
     if (!isAdmin) return;
