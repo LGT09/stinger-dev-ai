@@ -184,14 +184,7 @@ const AdminDashboard = () => {
     );
   }
 
-  const q = search.trim().toLowerCase();
-  const filtered = q
-    ? users.filter(u =>
-        (u.email ?? "").toLowerCase().includes(q) ||
-        (u.display_name ?? "").toLowerCase().includes(q)
-      )
-    : users;
-  const visible = filtered.slice(0, limit);
+  const visible = users;
 
 
   return (
@@ -201,17 +194,17 @@ const AdminDashboard = () => {
           <Shield size={16} className="text-primary" />
           <p className="text-sm text-muted-foreground">Admin Dashboard</p>
         </div>
-        <button onClick={loadUsers} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-all">
+        <button onClick={refresh} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-all">
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
         </button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { icon: Users, label: "Users", value: users.length, color: "text-accent" },
-          { icon: Zap, label: "Total Tokens", value: users.reduce((s, u) => s + (u.balance ?? 0), 0).toLocaleString(), color: "text-primary" },
-          { icon: DollarSign, label: "Pro Users", value: users.filter(u => u.plan === "pro").length, color: "text-green-400" },
-          { icon: Ban, label: "Banned", value: users.filter(u => u.is_banned || u.is_suspended).length, color: "text-destructive" },
+          { icon: Users, label: "Users", value: stats.total_users.toLocaleString(), color: "text-accent" },
+          { icon: Zap, label: "Total Tokens", value: stats.total_tokens.toLocaleString(), color: "text-primary" },
+          { icon: DollarSign, label: "Pro Users", value: stats.pro_users.toLocaleString(), color: "text-green-400" },
+          { icon: Ban, label: "Banned", value: stats.blocked_users.toLocaleString(), color: "text-destructive" },
         ].map(({ icon: Icon, label, value, color }) => (
           <motion.div key={label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass rounded-xl p-3 hover:scale-105 transition-transform">
             <div className="flex items-center gap-1.5 mb-1"><Icon size={12} className={color} /><span className="text-[10px] text-muted-foreground">{label}</span></div>
@@ -245,7 +238,7 @@ const AdminDashboard = () => {
             {bulkBusy ? "Applying…" : "Apply"}
           </button>
           <span className="text-[10px] text-muted-foreground">
-            {bulkTarget === "selected" ? `${Object.values(selected).filter(Boolean).length} selected` : bulkTarget === "filtered" ? `${filteredIds().length} matched` : `${users.length} users`}
+            {bulkTarget === "selected" ? `${Object.values(selected).filter(Boolean).length} selected` : bulkTarget === "filtered" ? `${filteredIds().length} loaded` : `${stats.total_users} users`}
           </span>
         </div>
         <p className="text-[10px] text-muted-foreground">Use a negative amount to deduct. Every change is written to each user's token history.</p>
@@ -333,11 +326,11 @@ const AdminDashboard = () => {
               </div>
             </div>
           ))}
-          {filtered.length === 0 && <p className="text-xs text-muted-foreground">No users match that search.</p>}
+          {!loading && visible.length === 0 && <p className="text-xs text-muted-foreground">No users match that search.</p>}
         </div>
-        {visible.length < filtered.length && (
+        {visible.length < total && (
           <button onClick={() => setLimit(l => l + 25)} className="mt-3 w-full rounded-lg bg-secondary py-2 text-xs text-foreground hover:opacity-90 btn-hover">
-            Load more ({filtered.length - visible.length} remaining)
+            Load more ({total - visible.length} remaining)
           </button>
         )}
       </div>
