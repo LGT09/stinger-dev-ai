@@ -25,15 +25,31 @@ const ok = paint("#4ade80");
 const bad = paint("#f87171");
 
 
-/** Chalk-rendered Stinger hornet mark — gold body, neon bolt. */
+
+/**
+ * Chalk-rendered Stinger hornet — antennae, compound eyes, striped
+ * abdomen and a stinger tip, painted in the brand gold/ink/neon.
+ */
+const wing = paint("#8fe9ff");
+const ink = paint("#3b444d");
 const LOGO = [
-  gold("      ╔══════════════════════════════════════╗"),
-  gold("      ║") + neon("   ▄▄   ") + gold("╱╲") + neon("   ▄▄   ") + gold("  ⚡  S T I N G E R ") + gold("║"),
-  gold("      ║") + neon("  ▐██▌ ") + gold("╱  ╲") + neon(" ▐██▌  ") + dim("   A I   D E V     ") + gold("║"),
-  gold("      ║") + gold("   ╲█████████████╱     ") + neon("<  />") + gold("        ║"),
-  gold("      ║") + gold("     ╲█████████╱       ") + dim("stinger.co.zw") + gold("   ║"),
-  gold("      ║") + neon("        ╲███╱          ") + dim("built by Traxxion") + gold(" ║"),
-  gold("      ╚══════════════════════════════════════╝"),
+  "",
+  "        " + ink("\\        /") + "        " + gold("S T I N G E R"),
+  "         " + ink("\\      /") + "         " + dim("A I   D E V"),
+  "        " + ink(",-'") + gold("-''-") + ink("'-,") + "        " + neon("⚡ terminal access"),
+  "       " + ink("(") + "  " + neon("◉") + gold("  ") + neon("◉") + "  " + ink(")"),
+  "        " + ink("'-.") + gold("_..._") + ink(".-'"),
+  "    " + wing("__") + gold("/") + gold("▟█████▙") + gold("\\") + wing("__"),
+  "  " + wing(",-'") + "  " + gold("███████") + "  " + wing("'-,") + "     " + dim("stinger.co.zw"),
+  " " + wing("(") + "     " + ink("▓▓▓▓▓▓▓") + "     " + wing(")"),
+  "  " + wing("'-.") + "  " + gold("███████") + "  " + wing(".-'") + "     " + dim("built by Traxxion"),
+  "       " + ink("▓▓▓▓▓▓▓▓▓"),
+  "        " + gold("███████"),
+  "         " + ink("▓▓▓▓▓"),
+  "          " + gold("███"),
+  "           " + neon("\\/"),
+  "            " + neon("v"),
+  "",
 ].join("\n");
 
 const MODELS = ["gaga-ai-nexus", "hostify-ai"];
