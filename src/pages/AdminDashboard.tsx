@@ -38,57 +38,52 @@ const AdminDashboard = () => {
   const [bulkTarget, setBulkTarget] = useState<"all" | "filtered" | "selected">("all");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({ total_users: 0, total_tokens: 0, pro_users: 0, blocked_users: 0 });
 
-  const filteredIds = () => {
-    const s = search.trim().toLowerCase();
-    return (s
-      ? users.filter(u => (u.email ?? "").toLowerCase().includes(s) || (u.display_name ?? "").toLowerCase().includes(s))
-      : users
-    ).map(u => u.user_id);
-  };
-
+  /** Ids of the rows currently loaded on screen. */
+  const filteredIds = () => users.map(u => u.user_id);
 
   useEffect(() => {
     if (!isAdmin) return;
-    loadUsers();
+    loadStats();
     loadPricing();
   }, [isAdmin]);
 
+  // Debounced, server-side paged user loading — the dashboard never pulls
+  // every profile/balance/session row, so large token grants stay snappy.
+  useEffect(() => {
+    if (!isAdmin) return;
+    const t = setTimeout(() => { loadUsers(); }, 300);
+    return () => clearTimeout(t);
+  }, [isAdmin, search, limit]);
+
+  const loadStats = async () => {
+    const { data } = await supabase.rpc("admin_platform_stats");
+    const row: any = Array.isArray(data) ? data[0] : data;
+    if (row) setStats({
+      total_users: Number(row.total_users ?? 0),
+      total_tokens: Number(row.total_tokens ?? 0),
+      pro_users: Number(row.pro_users ?? 0),
+      blocked_users: Number(row.blocked_users ?? 0),
+    });
+  };
+
   const loadUsers = async () => {
     setLoading(true);
-    const [{ data: profiles }, { data: balances }, { data: sessions }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("user_id, display_name, email, is_verified, is_banned, is_suspended, ban_reason, plan")
-        .order("created_at", { ascending: false })
-        .limit(500),
-      supabase.from("token_balances").select("user_id, balance").limit(1000),
-      supabase
-        .from("user_sessions")
-        .select("user_id, ip_address, last_seen_at, device, browser, city, country")
-        .order("last_seen_at", { ascending: false })
-        .limit(500),
-    ]);
-    if (!profiles) { setLoading(false); return; }
-    const balanceByUser: Record<string, number> = {};
-    (balances || []).forEach((b: any) => { balanceByUser[b.user_id] = b.balance; });
-    const latestByUser: Record<string, any> = {};
-    (sessions || []).forEach((s: any) => { if (!latestByUser[s.user_id]) latestByUser[s.user_id] = s; });
-    const merged = profiles.map((p: any) => {
-      const s = latestByUser[p.user_id];
-      return {
-        ...p,
-        balance: balanceByUser[p.user_id] ?? 0,
-        last_seen_at: s?.last_seen_at ?? null,
-        last_ip: s?.ip_address ?? null,
-        last_device: s?.device ?? null,
-        last_browser: s?.browser ?? null,
-        last_location: s ? [s.city, s.country].filter(Boolean).join(", ") : null,
-      };
+    const { data, error } = await supabase.rpc("admin_user_page", {
+      _search: search.trim() || null,
+      _limit: limit,
+      _offset: 0,
     });
-    setUsers(merged);
+    if (error) { toast.error("Failed to load users: " + error.message); setLoading(false); return; }
+    const rows = (data as any[]) || [];
+    setTotal(rows.length ? Number(rows[0].total_count ?? rows.length) : 0);
+    setUsers(rows.map((r: any) => ({ ...r, balance: r.balance ?? 0 })));
     setLoading(false);
   };
+
+  const refresh = () => { loadUsers(); loadStats(); };
 
   const loadPricing = async () => {
     const { data } = await supabase.from("token_pricing").select("*").order("price");
