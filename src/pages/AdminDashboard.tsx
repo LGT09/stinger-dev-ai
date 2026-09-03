@@ -96,7 +96,7 @@ const AdminDashboard = () => {
     if (error) { toast.error("Failed: " + error.message); return; }
     toast.success(`${amount > 0 ? "Granted" : "Deducted"} ${Math.abs(amount)} tokens`);
     setTokenAmount(p => ({ ...p, [userId]: 0 }));
-    loadUsers();
+    refresh();
   };
 
   /** Bulk grant / deduct / set — everyone, the current search results, or picked users. */
@@ -118,7 +118,7 @@ const AdminDashboard = () => {
     if (error) { toast.error("Failed: " + error.message); return; }
     toast.success(`Tokens updated for ${data ?? 0} user(s)`);
     setSelected({});
-    loadUsers();
+    refresh();
   };
 
 
@@ -126,14 +126,14 @@ const AdminDashboard = () => {
     const { error } = await supabase.from("profiles").update({ plan: plan === "free" ? "pro" : "free" }).eq("user_id", userId);
     if (error) { toast.error("Failed: " + error.message); return; }
     toast.success("Plan updated");
-    loadUsers();
+    refresh();
   };
 
   const toggleVerified = async (userId: string, current: boolean) => {
     const { error } = await supabase.from("profiles").update({ is_verified: !current }).eq("user_id", userId);
     if (error) { toast.error("Failed: " + error.message); return; }
     toast.success(`Verification ${!current ? "granted" : "revoked"}`);
-    loadUsers();
+    refresh();
   };
 
   const banUser = async (userId: string) => {
@@ -143,7 +143,7 @@ const AdminDashboard = () => {
     if (error) { toast.error("Failed: " + error.message); return; }
     toast.success("User banned");
     setBanReason(p => ({ ...p, [userId]: "" }));
-    loadUsers();
+    refresh();
   };
 
   const suspendUser = async (userId: string) => {
@@ -152,14 +152,14 @@ const AdminDashboard = () => {
     if (error) { toast.error("Failed: " + error.message); return; }
     toast.success("User suspended");
     setBanReason(p => ({ ...p, [userId]: "" }));
-    loadUsers();
+    refresh();
   };
 
   const unbanUser = async (userId: string) => {
     const { error } = await supabase.from("profiles").update({ is_banned: false, is_suspended: false, ban_reason: null }).eq("user_id", userId);
     if (error) { toast.error("Failed: " + error.message); return; }
     toast.success("User restored");
-    loadUsers();
+    refresh();
   };
 
   const updatePricing = async (id: string) => {
