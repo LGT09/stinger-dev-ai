@@ -972,6 +972,35 @@ export type Database = {
         Args: { _amount: number; _mode?: string; _user_ids?: string[] }
         Returns: number
       }
+      admin_platform_stats: {
+        Args: never
+        Returns: {
+          blocked_users: number
+          pro_users: number
+          total_tokens: number
+          total_users: number
+        }[]
+      }
+      admin_user_page: {
+        Args: { _limit?: number; _offset?: number; _search?: string }
+        Returns: {
+          balance: number
+          ban_reason: string
+          display_name: string
+          email: string
+          is_banned: boolean
+          is_suspended: boolean
+          is_verified: boolean
+          last_browser: string
+          last_device: string
+          last_ip: string
+          last_location: string
+          last_seen_at: string
+          plan: Database["public"]["Enums"]["app_plan"]
+          total_count: number
+          user_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
