@@ -224,7 +224,7 @@ const AdminDashboard = () => {
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <select value={bulkTarget} onChange={e => setBulkTarget(e.target.value as any)} className="bg-secondary rounded-lg px-2 py-1.5 text-foreground">
             <option value="all">All users</option>
-            <option value="filtered">Search results</option>
+            <option value="filtered">Loaded users</option>
             <option value="selected">Selected users</option>
           </select>
           <select value={bulkMode} onChange={e => setBulkMode(e.target.value as any)} className="bg-secondary rounded-lg px-2 py-1.5 text-foreground">
