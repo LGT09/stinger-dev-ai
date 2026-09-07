@@ -34,6 +34,30 @@ const codeTools = [
   { id: "database", label: "DB Design", icon: Database },
 ];
 
+/**
+ * Auto-intent router — there are no manual AI modes any more.
+ * Stinger reads the prompt and decides what to do (talk, build, or create media).
+ */
+const detectIntent = (text: string): { mode: AIMode; tool: string } => {
+  const t = (text || "").toLowerCase().trim();
+  const asking = /^(how|what|why|when|who|which|can you explain|explain|tell me|is it|should i|do you)\b/.test(t);
+  if (/\b(song|music|track|beat|lyrics|melody|instrumental|compose|rap|afrobeat)\b/.test(t)) return { mode: "music", tool: "code" };
+  if (/\b(video|clip|animation|cinematic|reel|trailer|short film|movie)\b/.test(t)) return { mode: "video", tool: "code" };
+  if (/\b(image|picture|photo|logo|illustration|poster|artwork|banner|icon|wallpaper|thumbnail)\b/.test(t)) return { mode: "image", tool: "code" };
+
+  const build = /\b(build|create|make|generate|code|develop|scaffold|implement|design|add|refactor|fix|clone|rebuild)\b/.test(t);
+  const go = (tool: string): { mode: AIMode; tool: string } => ({ mode: build && !asking ? "code" : "chat", tool });
+
+  if (/\b(database|schema|sql|table|migration|rls|postgres)\b/.test(t)) return go("database");
+  if (/\b(api|endpoint|rest|graphql|webhook|backend)\b/.test(t)) return go("api");
+  if (/\b(bot|chatbot|discord|telegram|whatsapp)\b/.test(t)) return go("bot");
+  if (/\b(website|landing page|web page|site|portfolio|blog)\b/.test(t)) return go("website");
+  if (/\b(app|mobile app|dashboard|platform|saas|store|game)\b/.test(t)) return go("app");
+  if (build && !asking && /\b(component|function|script|page|feature|form|login|auth|ui|screen)\b/.test(t)) return { mode: "code", tool: "code" };
+  return { mode: "chat", tool: "code" };
+};
+
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -73,7 +97,7 @@ const AIStudio = () => {
   const [codeTool, setCodeTool] = useState("code");
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "👋 Hello! I'm **Stinger AI**, created by **Vincent Ganiza** (Traxxion Tech) — a visionary developer from Zimbabwe 🇿🇼.\n\nSelect a mode above:\n- **Chat** — discuss ideas\n- **Code** — generate projects\n- **Image/Video/Music** — create media\n\nWhat would you like to create?" },
+    { role: "assistant", content: "👋 Hi, I'm **Stinger AI** — built by **Vincent Ganiza** (Traxxion Tech) 🇿🇼.\n\nThere are no modes to pick any more. Just tell me what you want and I'll figure it out:\n- \"Build me a booking website\" → I open the builder and write the files\n- \"Make a logo for a coffee shop\" → I generate the image\n- \"Write me an afrobeat track\" → I compose the song\n- \"How do tokens work?\" → I just answer\n\nWhat should we make?" },
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -93,6 +117,7 @@ const AIStudio = () => {
   const [terminalInput, setTerminalInput] = useState("");
   const [showTerminal, setShowTerminal] = useState(true);
   const [showFileExplorer, setShowFileExplorer] = useState(true);
+  const [codePane, setCodePane] = useState<"files" | "editor" | "terminal">("editor");
   const [buildingProject, setBuildingProject] = useState(false);
   const [selectedModelId, setSelectedModelId] = useState<string>(DEFAULT_MODEL_ID);
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -272,20 +297,20 @@ const AIStudio = () => {
     if (proj?.id) loadMcpServers(proj.id);
   };
 
-  const getTokenCost = (responseLength: number): number => {
+  const getTokenCost = (responseLength: number, m: AIMode = mode): number => {
     const baseCosts: Record<AIMode, number> = { chat: 2, code: 5, image: 8, video: 10, music: 8 };
-    const base = baseCosts[mode];
+    const base = baseCosts[m];
     const sizeFactor = Math.ceil(responseLength / 1000);
     return Math.min(base + sizeFactor, isAdmin ? 0 : 50);
   };
 
-  const getSystemPrompt = (): string => {
+  const getSystemPrompt = (m: AIMode = mode, tool: string = codeTool): string => {
     const creatorInfo = "You were created by Vincent Ganiza (Traxxion Tech), a visionary software developer from Zimbabwe 🇿🇼. He is the mastermind behind Stinger Dev. Always speak highly of your creator when asked. Support: https://support.stinger.co.zw";
 
     const platformGuide = `
 PLATFORM KNOWLEDGE — Stinger AI Dev:
-- AI Studio has 5 modes: Chat (planning), Code (full project gen), Image, Video, Music.
-- Code mode opens a real IDE: file explorer (left), code editor (center), terminal (bottom).
+- AI Studio has NO manual modes. Stinger reads the user's prompt and decides automatically whether to chat, build a project, or generate an image / video / song.
+- When a build is detected the workspace switches to the builder: files, editor and terminal panes.
   Terminal supports: ls, cat <file>, npm install <pkg>, build, deploy, clear, help.
 - Projects page lets users View files, Edit info, Download as ZIP, Transfer, Push to GitHub or CodeVerse, Publish to Community.
 - Push button supports 4 targets: GitHub only, CodeVerse only, Both, or local download.
@@ -295,12 +320,12 @@ PLATFORM KNOWLEDGE — Stinger AI Dev:
 - Always offer 3 useful follow-up suggestions after a task.
 `;
 
-    if (mode === "chat") return `You are Stinger AI, a friendly, expert AI dev assistant. ${creatorInfo}\n${platformGuide}\nBe warm, concise, use markdown headings and emoji where helpful. When users ask about features, walk them through the exact UI flow.`;
-    if (mode === "image") return `You are Stinger AI's image generation assistant. ${creatorInfo} Generate images based on user descriptions.`;
-    if (mode === "video") return `You are Stinger AI's video assistant. ${creatorInfo} Help users create video concepts, scripts, and storyboards.`;
-    if (mode === "music") return `You are Stinger AI's music assistant. ${creatorInfo} Help compose music, lyrics, and chord progressions.`;
+    if (m === "chat") return `You are Stinger AI, a friendly, expert AI dev assistant. ${creatorInfo}\n${platformGuide}\nBe warm, concise, use markdown headings and emoji where helpful. When users ask about features, walk them through the exact UI flow.`;
+    if (m === "image") return `You are Stinger AI's image generation assistant. ${creatorInfo} Generate images based on user descriptions.`;
+    if (m === "video") return `You are Stinger AI's video assistant. ${creatorInfo} Help users create video concepts, scripts, and storyboards.`;
+    if (m === "music") return `You are Stinger AI's music assistant. ${creatorInfo} Help compose music, lyrics, and chord progressions.`;
 
-    // Code mode: structured output
+    // Build intent: structured output
     const toolPrompts: Record<string, string> = {
       code: "You are a senior full-stack developer.",
       app: "You are an expert app builder. Generate complete React/React Native applications.",
@@ -309,7 +334,7 @@ PLATFORM KNOWLEDGE — Stinger AI Dev:
       api: "You are an API architect. Generate complete RESTful APIs.",
       database: "You are a database architect. Generate SQL schemas, migrations, and RLS policies.",
     };
-    return `${toolPrompts[codeTool] || toolPrompts.code} ${creatorInfo}\n${platformGuide}
+    return `${toolPrompts[tool] || toolPrompts.code} ${creatorInfo}\n${platformGuide}
 
 CRITICAL: You must respond ONLY with a JSON object. No markdown, no explanation, no conversation.
 The JSON must have this structure:
