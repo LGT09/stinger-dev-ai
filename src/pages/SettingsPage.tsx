@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Moon, Sun, Monitor, Zap, LogOut, User, Share2, Copy, Camera, Waves, TreePine, Sunset, GitBranch, ExternalLink, Fingerprint, Activity, Trash2, MapPin, Smartphone } from "lucide-react";
+import { Moon, Sun, Monitor, Zap, LogOut, User, Share2, Copy, Camera, Waves, TreePine, Sunset, GitBranch, ExternalLink, Fingerprint, Activity, Trash2, MapPin, Smartphone, Rocket, FileText } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { registerPasskey, supportsBiometric } from "@/lib/biometric";
 
-type Theme = "system" | "light" | "dark" | "neon" | "ocean" | "sunset" | "forest";
+type Theme = "system" | "light" | "dark" | "neon" | "ocean" | "sunset" | "forest" | "space" | "paper";
 
 const themes: { id: Theme; label: string; icon: React.ElementType }[] = [
   { id: "system", label: "System", icon: Monitor },
@@ -16,6 +16,8 @@ const themes: { id: Theme; label: string; icon: React.ElementType }[] = [
   { id: "ocean", label: "Ocean", icon: Waves },
   { id: "sunset", label: "Sunset", icon: Sunset },
   { id: "forest", label: "Forest", icon: TreePine },
+  { id: "space", label: "Space", icon: Rocket },
+  { id: "paper", label: "Paper", icon: FileText },
 ];
 
 const SettingsPage = () => {
@@ -79,7 +81,7 @@ const SettingsPage = () => {
     localStorage.setItem("stinger-theme", theme);
     root.classList.remove("dark");
     root.removeAttribute("data-theme");
-    if (["neon", "ocean", "sunset", "forest"].includes(theme)) root.setAttribute("data-theme", theme);
+    if (["neon", "ocean", "sunset", "forest", "space", "paper"].includes(theme)) root.setAttribute("data-theme", theme);
     else if (theme === "dark") root.classList.add("dark");
     else if (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches) root.classList.add("dark");
   }, [theme]);

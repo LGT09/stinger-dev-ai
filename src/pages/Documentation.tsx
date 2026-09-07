@@ -126,28 +126,6 @@ Go to **Settings** → **Referral Program** → Click **Copy Link**
 ### Publishing
 Click the globe icon on any project to publish it to the community. Other users can view the code and fork it.`,
   },
-  {
-    id: "admin",
-    icon: Shield,
-    title: "Admin Guide",
-    content: `## Admin Dashboard
-
-### Access
-Admin access is granted to **traxxiontech@gmail.com** automatically.
-
-### User Management
-- **Grant/Deduct Tokens** — Adjust user balances
-- **Verify Users** — Grant verified badge
-- **Ban/Suspend** — Block users with a reason
-- **Plan Management** — Switch users between Free and Pro
-
-### Token Pricing
-Edit pricing tiers directly from the admin dashboard. Changes are reflected immediately on the Tokens page.
-
-### Monitoring
-- View total users, tokens, and banned accounts
-- Search users by name or email`,
-  },
 ];
 
 const Documentation = () => {
