@@ -77,7 +77,7 @@ const AppContent = () => {
     const root = document.documentElement;
     root.classList.remove("dark");
     root.removeAttribute("data-theme");
-    if (["neon", "ocean", "sunset", "forest"].includes(saved)) root.setAttribute("data-theme", saved);
+    if (["neon", "ocean", "sunset", "forest", "space", "paper"].includes(saved)) root.setAttribute("data-theme", saved);
     else if (saved === "dark") root.classList.add("dark");
     else if (saved === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches) root.classList.add("dark");
   }, []);

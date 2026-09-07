@@ -81,7 +81,7 @@ const SettingsPage = () => {
     localStorage.setItem("stinger-theme", theme);
     root.classList.remove("dark");
     root.removeAttribute("data-theme");
-    if (["neon", "ocean", "sunset", "forest"].includes(theme)) root.setAttribute("data-theme", theme);
+    if (["neon", "ocean", "sunset", "forest", "space", "paper"].includes(theme)) root.setAttribute("data-theme", theme);
     else if (theme === "dark") root.classList.add("dark");
     else if (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches) root.classList.add("dark");
   }, [theme]);
