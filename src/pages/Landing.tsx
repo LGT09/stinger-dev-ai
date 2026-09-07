@@ -1,12 +1,29 @@
 import { useRef } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import Hero3D from "@/components/Hero3D";
-import { Bot, Code, Image as ImageIcon, Video, Music, FolderKanban, Globe, Zap, Shield, GitBranch, Database, Users, Sparkles, ArrowRight, Check, BookOpen, Share2 } from "lucide-react";
+import { Bot, Code, Image as ImageIcon, Video, Music, FolderKanban, Globe, Zap, Shield, GitBranch, Database, Users, Sparkles, ArrowRight, Check, BookOpen, Share2, Star, ExternalLink } from "lucide-react";
 import logo from "@/assets/logo.png";
+import hostifyAsset from "@/assets/partner-hostify.jpg.asset.json";
+import watcherAsset from "@/assets/partner-watcherpro.jpg.asset.json";
+import netfyAsset from "@/assets/partner-netfy.jpg.asset.json";
+import synapexAsset from "@/assets/partner-synapex.jpg.asset.json";
 
 interface Props {
   onGetStarted: () => void;
 }
+
+const partners = [
+  { name: "Hostify Zimbabwe", tag: "Host · Build · Grow", img: hostifyAsset.url, url: "https://hostify.co.zw" },
+  { name: "WatcHER Pro", tag: "Monitoring & security", img: watcherAsset.url, url: "https://cyber-coder225.hostify.co.zw" },
+  { name: "Netfy", tag: "Web hosting platform", img: netfyAsset.url, url: "https://netfy.co.zw" },
+  { name: "Synapex", tag: "Intelligent systems", img: synapexAsset.url, url: "https://synapex.co.zw" },
+];
+
+const reviews = [
+  { name: "Tinashe M.", role: "Indie founder", stars: 5, text: "Shipped my whole SaaS front-end in a weekend. The live preview alone is worth it." },
+  { name: "Ruvarashe C.", role: "Product designer", stars: 5, text: "I describe a screen and it appears. Exporting the ZIP and handing it to devs is seamless." },
+  { name: "Kudzai N.", role: "Backend dev", stars: 4, text: "Pushing straight to GitHub and deploying to a live URL saves me hours every week." },
+];
 
 const features = [
   { icon: Bot, title: "Stinger AI Chat", desc: "Discuss & plan projects with an AI built by Vincent Ganiza." },
