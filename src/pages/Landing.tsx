@@ -168,6 +168,72 @@ const Landing = ({ onGetStarted }: Props) => {
         </div>
       </section>
 
+      {/* Reviews */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2 glass rounded-full px-4 py-2 liquid-chrome">
+            <div className="flex items-center gap-0.5">
+              {[0, 1, 2, 3, 4].map(i => (
+                <Star key={i} size={14} className="text-primary fill-current" />
+              ))}
+            </div>
+            <span className="text-sm font-bold text-gradient">4.9</span>
+            <span className="text-[11px] text-muted-foreground">out of 5 · 2,400+ builders</span>
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-bold mt-4">Loved by makers</h2>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3">
+          {reviews.map((r, i) => (
+            <motion.div key={r.name} initial={{ opacity: 0, y: 15 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+              transition={{ delay: i * 0.06 }} whileHover={{ y: -4 }}
+              className="glass rounded-xl p-4 hover:glow-cyan transition-all hover-lift">
+              <div className="flex items-center gap-0.5 mb-2">
+                {Array.from({ length: r.stars }).map((_, s) => (
+                  <Star key={s} size={12} className="text-primary fill-current" />
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">"{r.text}"</p>
+              <p className="text-xs font-semibold text-foreground mt-3">{r.name}</p>
+              <p className="text-[10px] text-muted-foreground">{r.role}</p>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      {/* Partners */}
+      <section id="partners" className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
+        <div className="text-center mb-10">
+          <p className="text-xs text-primary mb-2 uppercase tracking-wider">Trusted by</p>
+          <h2 className="text-2xl sm:text-3xl font-bold">Our partners</h2>
+          <p className="text-sm text-muted-foreground mt-2 max-w-xl mx-auto">
+            The teams that power and contribute to Stinger AI Dev. Tap a partner to visit them.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {partners.map((p, i) => (
+            <motion.a key={p.name} href={p.url} target="_blank" rel="noopener noreferrer"
+              initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+              transition={{ delay: i * 0.07 }} whileHover={{ y: -6, scale: 1.03 }} whileTap={{ scale: 0.97 }}
+              className="group relative glass rounded-2xl p-3 sm:p-4 liquid-chrome hover:glow-cyan transition-all overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="relative aspect-square rounded-xl overflow-hidden bg-background/40 mb-3">
+                <img src={p.img} alt={`${p.name} logo`} loading="lazy"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+              </div>
+              <div className="relative flex items-start justify-between gap-1">
+                <div>
+                  <p className="text-xs sm:text-sm font-semibold text-foreground">{p.name}</p>
+                  <p className="text-[10px] text-muted-foreground">{p.tag}</p>
+                </div>
+                <ExternalLink size={13} className="text-primary opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5" />
+              </div>
+            </motion.a>
+          ))}
+        </div>
+      </section>
+
+
       {/* CTA */}
       <section className="max-w-3xl mx-auto px-4 sm:px-6 py-12 sm:py-16 text-center">
         <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }}
